@@ -1,0 +1,4 @@
+interface:
+  display_name: "FFmpeg Video Recreator"
+  short_description: "Extract keyframes and recreate-ready video reports"
+  default_prompt: "Use $ffmpeg-video-recreator to extract keyframes from a video folder and produce a recreate-ready report."

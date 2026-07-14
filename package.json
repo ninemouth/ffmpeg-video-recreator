@@ -1,0 +1,20 @@
+{
+  "name": "ffmpeg-video-recreator",
+  "version": "0.1.0",
+  "description": "Codex skill package for FFmpeg installation, video keyframe extraction, and recreate-ready video reports.",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "verify": "node scripts/verify-skill.mjs",
+    "paths:run": "node scripts/create-run-skeleton.mjs",
+    "ffmpeg:check": "node scripts/install-ffmpeg.mjs --check",
+    "ffmpeg:install": "node scripts/install-ffmpeg.mjs --install",
+    "extract:keyframes": "node scripts/extract-keyframes.mjs",
+    "sync": "node scripts/sync-to-codex-skill.mjs",
+    "sync:codex": "node scripts/sync-to-codex-skill.mjs --skill-name ffmpeg-video-recreator"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
