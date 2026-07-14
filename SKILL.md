@@ -7,6 +7,8 @@ description: Install or locate FFmpeg on macOS or Windows, create isolated per-t
 
 ## Core Workflow
 
+If the skill is not installed or the user asks to install/update from GitHub, follow `references/github-install-update.md` first. Prefer the bundled installer/update script after cloning the repo.
+
 1. Create a separate run workspace for every task:
 
 ```bash
@@ -80,5 +82,7 @@ The report must include:
 ## References
 
 Read `references/report-contract.md` before writing a final report.
+
+Read `references/github-install-update.md` when the user asks to install, update, reinstall, distribute, or deploy this skill from GitHub.
 
 Read `references/ffmpeg-platform-notes.md` only when FFmpeg installation fails or the current OS needs manual remediation.

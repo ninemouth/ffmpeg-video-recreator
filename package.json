@@ -5,12 +5,19 @@
   "private": true,
   "type": "module",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/ninemouth/ffmpeg-video-recreator.git"
+  },
   "scripts": {
     "verify": "node scripts/verify-skill.mjs",
     "paths:run": "node scripts/create-run-skeleton.mjs",
     "ffmpeg:check": "node scripts/install-ffmpeg.mjs --check",
     "ffmpeg:install": "node scripts/install-ffmpeg.mjs --install",
     "extract:keyframes": "node scripts/extract-keyframes.mjs",
+    "check:update": "node scripts/check-skill-update.mjs",
+    "install:github": "node scripts/install-or-update-from-github.mjs",
+    "update:github": "node scripts/install-or-update-from-github.mjs --update",
     "sync": "node scripts/sync-to-codex-skill.mjs",
     "sync:codex": "node scripts/sync-to-codex-skill.mjs --skill-name ffmpeg-video-recreator"
   },
