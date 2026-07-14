@@ -22,13 +22,15 @@ node scripts/install-ffmpeg.mjs --check
 node scripts/install-ffmpeg.mjs --install
 ```
 
-3. Extract keyframes from the source directory:
+3. Extract keyframes from the source directory. Choose the report language from the user's interaction language: use `--language zh` for Chinese conversations, `--language en` for English conversations, and `--language auto` only when unclear.
 
 ```bash
-node scripts/extract-keyframes.mjs --input "/path/to/video-folder" --run "work/runs/<run-id>" --mode hybrid
+node scripts/extract-keyframes.mjs --input "/path/to/video-folder" --run "work/runs/<run-id>" --mode hybrid --language zh
 ```
 
 4. Read `references/report-contract.md`, inspect the extracted frames, then fill the generated `output/recreate-report.md`.
+
+5. Deliver the complete `output/` package, not only a contact sheet or report.
 
 ## Workspace Contract
 
@@ -37,9 +39,13 @@ Each task must stay inside one run directory:
 ```text
 work/runs/<timestamp-slug>/
 ├── input/              # optional copied source assets or symlinks
-├── frames/             # extracted keyframes grouped by video
+├── frames/             # raw extracted keyframes grouped by video
 ├── metadata/           # ffprobe, manifest, command log, frame index
-├── output/             # final recreate report and script artifacts
+├── output/             # final delivery package
+│   ├── keyframes/      # copied keyframes for delivery
+│   ├── keyframes-index.md
+│   ├── delivery-manifest.json
+│   └── recreate-report.md
 └── qa/                 # verification notes and risk checks
 ```
 
@@ -56,8 +62,21 @@ Use `interval` mode when the video has long static scenes, tutorials, screen rec
 Recommended command shape:
 
 ```bash
-node scripts/extract-keyframes.mjs --input "/path/to/videos" --run "work/runs/<run-id>" --mode hybrid --interval 2 --scene-threshold 0.32
+node scripts/extract-keyframes.mjs --input "/path/to/videos" --run "work/runs/<run-id>" --mode hybrid --interval 2 --scene-threshold 0.32 --language zh
 ```
+
+By default, extracted keyframes are copied into `output/keyframes/` as formal deliverables. Use `--no-copy-keyframes` only when the video is huge and the user explicitly prefers references to the raw `frames/` directory.
+
+## Delivery Package
+
+The final user-facing delivery is the whole `output/` directory:
+
+- `output/recreate-report.md`: language-matched recreate report.
+- `output/keyframes/`: extracted keyframes grouped by source video.
+- `output/keyframes-index.md`: human-readable keyframe index with visual-note placeholders.
+- `output/delivery-manifest.json`: machine-readable list of report, keyframes, metadata, and source video summaries.
+
+If a contact sheet is also generated, treat it as a navigation aid. It does not replace the individual keyframe files.
 
 ## Report Creation
 
@@ -65,12 +84,16 @@ The scripts generate a report scaffold, not a finished creative judgment. After 
 
 1. Open `metadata/manifest.json` and `metadata/frame-index.json`.
 2. Inspect representative frames from each video.
-3. Write `output/recreate-report.md` using `references/report-contract.md`.
-4. Include enough detail for another AI to recreate the video while allowing intentional changes.
+3. Open `output/keyframes-index.md` and add concise visual notes for the most important frames.
+4. Write `output/recreate-report.md` using `references/report-contract.md`.
+5. Include enough detail for another AI to recreate the video while allowing intentional changes.
+
+Use the user's interaction language for the final report and keyframe notes. If the user speaks Chinese, the report, section labels, summaries, shot table, script, and prompts should be Chinese unless the user asks otherwise.
 
 The report must include:
 
 - Source inventory and technical metadata.
+- Delivered keyframes and an index that links frame files to observations.
 - Frame-by-frame visual observations.
 - Shot sequence with timestamps, camera movement, composition, lighting, subject/action, and text overlays.
 - Narrative/script reconstruction including voiceover, dialogue, captions, on-screen text, beats, and transitions.

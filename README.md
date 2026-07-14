@@ -2,7 +2,7 @@
 
 Codex skill for FFmpeg-based video keyframe extraction and recreate-ready video reports.
 
-`ffmpeg-video-recreator` helps Codex analyze videos without asking the AI to read the raw video directly. The deterministic layer uses `ffmpeg` and `ffprobe` to inspect videos, extract keyframes, and create structured run artifacts. Codex then reviews the extracted frames and metadata to write a report, script, shot list, and prompt pack that another AI can use to recreate or modify the video.
+`ffmpeg-video-recreator` helps Codex analyze videos without asking the AI to read the raw video directly. The deterministic layer uses `ffmpeg` and `ffprobe` to inspect videos, extract keyframes, and create structured run artifacts. Codex then reviews the extracted frames and metadata to write a language-matched report, script, shot list, and prompt pack that another AI can use to recreate or modify the video.
 
 中文说明见下方。English documentation follows after the Chinese section.
 
@@ -16,9 +16,10 @@ Codex skill for FFmpeg-based video keyframe extraction and recreate-ready video 
 - 为每个视频分析任务创建独立工作目录和输出目录。
 - 对指定目录下的视频批量读取 metadata。
 - 使用 FFmpeg 抽取关键帧，而不是让 AI 直接读取原视频流。
-- 基于关键帧和 metadata 生成可复刻创作报告，包括总结、镜头拆解、剧本、脚本、AI 视频生成提示词和修改方案。
+- 将关键帧作为正式交付资产复制到 `output/keyframes/`。
+- 基于关键帧和 metadata 生成符合用户交互语言的可复刻创作报告，包括总结、镜头拆解、剧本、脚本、AI 视频生成提示词和修改方案。
 
-核心目标是得到一份报告，让你可以把这份报告交给 AI 视频工具，用来复刻原视频，并对部分内容进行可控修改。
+核心目标是得到一个完整交付包，而不只是一张 contact sheet 或一份报告。交付包里的关键帧、索引、metadata 和报告可以一起交给 AI 视频工具，用来复刻原视频，并对部分内容进行可控修改。
 
 ### 工作方式
 
@@ -31,7 +32,7 @@ ffmpeg 抽取关键帧 jpg
   ↓
 Codex 查看关键帧 + metadata
   ↓
-生成可复刻报告 / 剧本 / 镜头脚本 / AI 生成 prompt
+生成关键帧交付包 / 可复刻报告 / 剧本 / 镜头脚本 / AI 生成 prompt
 ```
 
 AI 默认不直接读取原视频。AI 读取的是 FFmpeg 生成的关键帧、`manifest.json`、`frame-index.json` 和 `ffprobe` metadata。
@@ -102,19 +103,19 @@ node ~/.codex/skills/ffmpeg-video-recreator/scripts/check-skill-update.mjs
 安装后，你可以直接对 Codex 说：
 
 ```text
-使用 $ffmpeg-video-recreator 分析 /path/to/video-folder 下的视频，抽取关键帧，并生成一份可以让 AI 复刻该视频的中文报告。报告需要包含视频总结、镜头拆解、剧本、分镜脚本、AI 生成提示词，以及我可以修改哪些内容。
+使用 $ffmpeg-video-recreator 分析 /path/to/video-folder 下的视频，抽取关键帧，并生成一份可以让 AI 复刻该视频的中文交付包。交付包需要包含 output/keyframes/ 关键帧、关键帧索引、delivery manifest、视频总结、镜头拆解、剧本、分镜脚本、AI 生成提示词，以及我可以修改哪些内容。
 ```
 
 更具体的示例：
 
 ```text
-使用 $ffmpeg-video-recreator 分析 ~/Desktop/video-samples 下的所有视频。请创建独立任务目录，先确认或安装 ffmpeg，使用 hybrid 模式抽取关键帧，然后根据关键帧和 metadata 生成 output/recreate-report.md。报告用中文写，目标是让另一个 AI 视频工具可以复刻原视频，但把人物换成亚洲女性、背景换成办公室、保留原视频节奏和镜头语言。
+使用 $ffmpeg-video-recreator 分析 ~/Desktop/video-samples 下的所有视频。请创建独立任务目录，先确认或安装 ffmpeg，使用 hybrid 模式抽取关键帧，并按中文交互语言输出。请交付 output/keyframes/、output/keyframes-index.md、output/delivery-manifest.json 和 output/recreate-report.md。报告用中文写，目标是让另一个 AI 视频工具可以复刻原视频，但把人物换成亚洲女性、背景换成办公室、保留原视频节奏和镜头语言。
 ```
 
 英文示例：
 
 ```text
-Use $ffmpeg-video-recreator to analyze all videos in ~/Desktop/video-samples. Create an isolated run directory, check or install ffmpeg, extract keyframes in hybrid mode, then write output/recreate-report.md from the frames and metadata. The report should help another AI recreate the video while changing the subject to an Asian woman in an office and preserving the original pacing and camera language.
+Use $ffmpeg-video-recreator to analyze all videos in ~/Desktop/video-samples. Create an isolated run directory, check or install ffmpeg, extract keyframes in hybrid mode, and match the report language to this English request. Deliver output/keyframes/, output/keyframes-index.md, output/delivery-manifest.json, and output/recreate-report.md. The report should help another AI recreate the video while changing the subject to an Asian woman in an office and preserving the original pacing and camera language.
 ```
 
 ### 手动使用
@@ -144,6 +145,7 @@ node scripts/extract-keyframes.mjs \
   --input "/path/to/video-folder" \
   --run "work/runs/<run-id>" \
   --mode hybrid \
+  --language zh \
   --interval 2 \
   --scene-threshold 0.32
 ```
@@ -159,9 +161,14 @@ work/runs/<run-id>/
 │   ├── frame-index.json
 │   └── *.ffprobe.json
 ├── output/
+│   ├── keyframes/
+│   ├── keyframes-index.md
+│   ├── delivery-manifest.json
 │   └── recreate-report.md
 └── qa/
 ```
+
+`output/` 是最终交付包。`frames/` 是原始抽帧目录，`output/keyframes/` 是便于交付给用户或其他 AI 工具的关键帧目录。contact sheet 如果存在，只能作为浏览辅助，不能替代单张关键帧交付。
 
 ### 抽帧模式
 
@@ -174,6 +181,7 @@ work/runs/<run-id>/
 最终报告应参考 [references/report-contract.md](references/report-contract.md)，至少包含：
 
 - 源视频清单和技术 metadata。
+- 关键帧交付目录和关键帧索引。
 - 视频整体总结。
 - 时间线和镜头拆解。
 - 画面风格、构图、光线、色彩、节奏、字幕和转场分析。
@@ -181,6 +189,8 @@ work/runs/<run-id>/
 - AI 视频生成 master prompt 和逐镜头 prompt。
 - 可修改项与必须保留项。
 - 缺失信息和 QA 风险。
+
+报告语言应跟随用户交互语言。中文任务输出中文报告、中文关键帧备注和中文 prompt；英文任务输出英文报告。
 
 ### 当前边界
 
@@ -212,9 +222,10 @@ It can:
 - Create an isolated workspace for each video-analysis task.
 - Read technical video metadata with `ffprobe`.
 - Extract representative keyframes with `ffmpeg`.
-- Generate a recreate-ready report, shot list, script, storyboard notes, and AI video prompt pack from the extracted frames and metadata.
+- Deliver individual keyframes under `output/keyframes/`.
+- Generate a language-matched recreate-ready report, shot list, script, storyboard notes, and AI video prompt pack from the extracted frames and metadata.
 
-The goal is to produce a report that another AI video tool can use to recreate the source video while intentionally modifying selected elements.
+The goal is to produce a complete delivery package, not only a contact sheet or report. The package should include keyframes, an index, metadata, and a report that another AI video tool can use to recreate the source video while intentionally modifying selected elements.
 
 ### How It Works
 
@@ -227,7 +238,7 @@ ffmpeg keyframe extraction
   ↓
 Codex reviews frames + metadata
   ↓
-Recreate report / script / shot list / AI prompts
+Keyframe delivery / recreate report / script / shot list / AI prompts
 ```
 
 The AI does not directly read the raw video stream by default. It reads FFmpeg-generated image frames and structured metadata.
@@ -286,13 +297,13 @@ node ~/.codex/skills/ffmpeg-video-recreator/scripts/check-skill-update.mjs
 After installation, ask Codex:
 
 ```text
-Use $ffmpeg-video-recreator to analyze all videos in /path/to/video-folder, extract keyframes, and write a recreate-ready report. Include a summary, shot breakdown, script reconstruction, storyboard-style shot list, AI video prompts, and a modification plan.
+Use $ffmpeg-video-recreator to analyze all videos in /path/to/video-folder, extract keyframes, and write a recreate-ready delivery package. Include output/keyframes/, a keyframe index, delivery manifest, summary, shot breakdown, script reconstruction, storyboard-style shot list, AI video prompts, and a modification plan.
 ```
 
 More specific example:
 
 ```text
-Use $ffmpeg-video-recreator to analyze all videos in ~/Desktop/video-samples. Create an isolated run directory, check or install ffmpeg, extract keyframes in hybrid mode, then write output/recreate-report.md from the frames and metadata. The report should help another AI recreate the video while changing the subject to an Asian woman in an office and preserving the original pacing and camera language.
+Use $ffmpeg-video-recreator to analyze all videos in ~/Desktop/video-samples. Create an isolated run directory, check or install ffmpeg, extract keyframes in hybrid mode, and match the report language to this English request. Deliver output/keyframes/, output/keyframes-index.md, output/delivery-manifest.json, and output/recreate-report.md. The report should help another AI recreate the video while changing the subject to an Asian woman in an office and preserving the original pacing and camera language.
 ```
 
 ### Manual Usage
@@ -322,6 +333,7 @@ node scripts/extract-keyframes.mjs \
   --input "/path/to/video-folder" \
   --run "work/runs/<run-id>" \
   --mode hybrid \
+  --language en \
   --interval 2 \
   --scene-threshold 0.32
 ```
@@ -337,9 +349,14 @@ work/runs/<run-id>/
 │   ├── frame-index.json
 │   └── *.ffprobe.json
 ├── output/
+│   ├── keyframes/
+│   ├── keyframes-index.md
+│   ├── delivery-manifest.json
 │   └── recreate-report.md
 └── qa/
 ```
+
+`output/` is the final delivery package. `frames/` stores the raw extracted frames, while `output/keyframes/` stores the keyframes intended for delivery to the user or another AI tool. A contact sheet, if generated, is only a navigation aid and does not replace the individual keyframe files.
 
 ### Extraction Modes
 
@@ -352,6 +369,7 @@ work/runs/<run-id>/
 Use [references/report-contract.md](references/report-contract.md) as the report contract. A complete report should include:
 
 - Source inventory and technical metadata.
+- Keyframe delivery directory and keyframe index.
 - Executive summary.
 - Timeline and shot-by-shot reconstruction.
 - Visual DNA: framing, motion, lighting, color, rhythm, captions, and transitions.
@@ -359,6 +377,8 @@ Use [references/report-contract.md](references/report-contract.md) as the report
 - Master prompt and per-shot prompts for AI video generation.
 - Modification plan separating preserved elements from editable elements.
 - Gaps, risks, and QA notes.
+
+The report language should match the user's interaction language. Chinese requests should receive Chinese reports, keyframe notes, and prompts; English requests should receive English reports.
 
 ### Current Boundaries
 
