@@ -119,6 +119,7 @@ async function main() {
   const sceneThreshold = Number(args["scene-threshold"] || 0.32);
   const language = normalizeLanguage(args.language || "auto");
   const copyKeyframes = args["no-copy-keyframes"] !== true;
+  const segmentFrames = Math.max(2, Number(args["segment-frames"] || 4));
 
   if (!input || !runDir) {
     console.error("Usage: node scripts/extract-keyframes.mjs --input <video-dir> --run <run-dir> [--mode hybrid|scene|interval] [--language zh|en|auto]");
@@ -144,7 +145,14 @@ async function main() {
   const manifest = {
     input_directory: input,
     run_directory: runDir,
-    extraction: { mode, interval_seconds: interval, scene_threshold: sceneThreshold, report_language: language, keyframes_copied_to_output: copyKeyframes },
+    extraction: {
+      mode,
+      interval_seconds: interval,
+      scene_threshold: sceneThreshold,
+      report_language: language,
+      keyframes_copied_to_output: copyKeyframes,
+      segment_frames: segmentFrames
+    },
     videos: []
   };
 
@@ -176,15 +184,17 @@ async function main() {
         };
       });
 
+    const recreationKeyframeDir = path.join(runDir, "output", "recreation-pack", "reference-keyframes", videoSlug);
+    await mkdir(recreationKeyframeDir, { recursive: true });
     if (copyKeyframes) {
       const deliveryDir = path.join(runDir, "output", "keyframes", videoSlug);
-      const recreationKeyframeDir = path.join(runDir, "output", "recreation-pack", "reference-keyframes", videoSlug);
       await mkdir(deliveryDir, { recursive: true });
-      await mkdir(recreationKeyframeDir, { recursive: true });
       for (const frame of frames) {
         await copyFile(path.join(runDir, frame.frame), path.join(runDir, frame.delivery_frame));
-        await copyFile(path.join(runDir, frame.frame), path.join(recreationKeyframeDir, frame.file));
       }
+    }
+    for (const frame of frames) {
+      await copyFile(path.join(runDir, frame.frame), path.join(recreationKeyframeDir, frame.file));
     }
 
     for (const frame of frames) {
@@ -213,7 +223,7 @@ async function main() {
   await writeFile(path.join(runDir, "output", "keyframes-index.md"), createKeyframeIndex(manifest, frameIndex, language), "utf8");
   await writeFile(path.join(runDir, "output", "delivery-manifest.json"), `${JSON.stringify(createDeliveryManifest(manifest, frameIndex), null, 2)}\n`);
   await writeFile(path.join(runDir, "output", "recreate-report.md"), createReportTemplate(manifest, language), "utf8");
-  await writeRecreationPack(runDir, manifest, frameIndex, language);
+  await writeRecreationPack(runDir, manifest, frameIndex, language, segmentFrames);
 
   console.log(JSON.stringify({
     run_directory: runDir,
@@ -224,6 +234,8 @@ async function main() {
       "output/keyframes-index.md",
       "output/delivery-manifest.json",
       "output/recreation-pack/",
+      "output/recreation-pack/segment-plan.md",
+      "output/recreation-pack/continuity-locks.md",
       copyKeyframes ? "output/keyframes/" : "frames/"
     ]
   }, null, 2));
@@ -258,6 +270,9 @@ function createDeliveryManifest(manifest, frameIndex) {
       keyframes_directory: manifest.extraction.keyframes_copied_to_output ? "output/keyframes" : "frames",
       recreation_pack_directory: "output/recreation-pack",
       recreation_pack_manifest: "output/recreation-pack/recreation-manifest.json",
+      segment_plan: "output/recreation-pack/segment-plan.md",
+      continuity_locks: "output/recreation-pack/continuity-locks.md",
+      segment_anchors_directory: "output/recreation-pack/segments",
       frame_index_json: "metadata/frame-index.json",
       manifest_json: "metadata/manifest.json",
       ffprobe_metadata_pattern: "metadata/*.ffprobe.json"
@@ -280,19 +295,21 @@ function createKeyframeIndex(manifest, frameIndex, language) {
   return `${title}\n\n${note}\n\n${headers}\n${rows}\n`;
 }
 
-async function writeRecreationPack(runDir, manifest, frameIndex, language) {
+async function writeRecreationPack(runDir, manifest, frameIndex, language, segmentFrames) {
   const packDir = path.join(runDir, "output", "recreation-pack");
+  const segments = createContinuitySegments(frameIndex, segmentFrames);
+  await copySegmentAnchors(runDir, segments);
   const isZh = language === "zh";
   const files = isZh
-    ? createChineseRecreationPackFiles(manifest, frameIndex)
-    : createEnglishRecreationPackFiles(manifest, frameIndex);
+    ? createChineseRecreationPackFiles(manifest, frameIndex, segments)
+    : createEnglishRecreationPackFiles(manifest, frameIndex, segments);
   for (const [relativePath, content] of Object.entries(files)) {
     await writeFile(path.join(packDir, relativePath), content, "utf8");
   }
-  await writeFile(path.join(packDir, "recreation-manifest.json"), `${JSON.stringify(createRecreationManifest(manifest, frameIndex, language), null, 2)}\n`);
+  await writeFile(path.join(packDir, "recreation-manifest.json"), `${JSON.stringify(createRecreationManifest(manifest, frameIndex, language, segments), null, 2)}\n`);
 }
 
-function createRecreationManifest(manifest, frameIndex, language) {
+function createRecreationManifest(manifest, frameIndex, language, segments) {
   return {
     schema_version: "ffmpeg_video_recreator.recreation_pack.v1",
     created_at: new Date().toISOString(),
@@ -308,8 +325,11 @@ function createRecreationManifest(manifest, frameIndex, language) {
       recreation_brief: "recreation-brief.md",
       shot_list: "shot-list.md",
       prompts: "prompts.md",
+      segment_plan: "segment-plan.md",
+      continuity_locks: "continuity-locks.md",
       modification_plan: "modification-plan.md",
       reference_keyframes: "reference-keyframes/",
+      segment_anchors: "segments/",
       source_report: "../recreate-report.md",
       source_keyframe_index: "../keyframes-index.md",
       source_delivery_manifest: "../delivery-manifest.json"
@@ -320,13 +340,71 @@ function createRecreationManifest(manifest, frameIndex, language) {
       index: frame.index,
       approx_timecode: frame.approx_timecode,
       file: path.join("reference-keyframes", frame.video_slug, frame.file)
-    }))
+    })),
+    segments
   };
 }
 
-function createEnglishRecreationPackFiles(manifest, frameIndex) {
+function createContinuitySegments(frameIndex, segmentFrames) {
+  const byVideo = new Map();
+  for (const frame of frameIndex) {
+    if (!byVideo.has(frame.video)) byVideo.set(frame.video, []);
+    byVideo.get(frame.video).push(frame);
+  }
+  const segments = [];
+  for (const [video, frames] of byVideo.entries()) {
+    for (let start = 0; start < frames.length; start += segmentFrames) {
+      const slice = frames.slice(start, start + segmentFrames);
+      if (!slice.length) continue;
+      const previous = segments.filter((segment) => segment.video === video).at(-1) || null;
+      const segmentNumber = previous ? previous.segment_number + 1 : 1;
+      const segmentId = `${slice[0].video_slug}-segment-${String(segmentNumber).padStart(3, "0")}`;
+      const startFrame = slice[0];
+      const endFrame = slice[slice.length - 1];
+      segments.push({
+        id: segmentId,
+        video,
+        video_slug: startFrame.video_slug,
+        segment_number: segmentNumber,
+        start_timecode: startFrame.approx_timecode,
+        end_timecode: endFrame.approx_timecode,
+        frame_indexes: slice.map((frame) => frame.index),
+        reference_frames: slice.map((frame) => path.join("reference-keyframes", frame.video_slug, frame.file)),
+        segment_folder: path.join("segments", segmentId),
+        start_frame: path.join("segments", segmentId, "start-frame.jpg"),
+        end_frame: path.join("segments", segmentId, "end-frame.jpg"),
+        previous_end_frame: previous ? path.join("segments", segmentId, "previous-segment-end-frame.jpg") : "",
+        continuity_anchor_from_previous_segment: previous ? previous.end_frame : "",
+        prompt_control: previous
+          ? "Use previous-segment-end-frame.jpg as the visual starting continuity anchor. Match subject identity, pose trajectory, lighting, camera angle, color palette, wardrobe/props, typography, and motion direction before introducing this segment's new action."
+          : "Establish the source identity, scene, camera language, lighting, color palette, wardrobe/props, typography, and motion direction for later segments."
+      });
+    }
+  }
+  return segments;
+}
+
+async function copySegmentAnchors(runDir, segments) {
+  for (const segment of segments) {
+    const segmentDir = path.join(runDir, "output", "recreation-pack", segment.segment_folder);
+    await mkdir(segmentDir, { recursive: true });
+    const startSource = path.join(runDir, "output", "recreation-pack", segment.reference_frames[0]);
+    const endSource = path.join(runDir, "output", "recreation-pack", segment.reference_frames.at(-1));
+    await copyFile(startSource, path.join(runDir, "output", "recreation-pack", segment.start_frame));
+    await copyFile(endSource, path.join(runDir, "output", "recreation-pack", segment.end_frame));
+    if (segment.continuity_anchor_from_previous_segment) {
+      await copyFile(
+        path.join(runDir, "output", "recreation-pack", segment.continuity_anchor_from_previous_segment),
+        path.join(runDir, "output", "recreation-pack", segment.previous_end_frame)
+      );
+    }
+  }
+}
+
+function createEnglishRecreationPackFiles(manifest, frameIndex, segments) {
   const videoLines = manifest.videos.map((video) => `- ${video.file}: ${video.metadata.duration_seconds}s, ${video.metadata.width}x${video.metadata.height}, ${video.frame_count} reference frames`).join("\n");
   const frameRows = frameIndex.map((frame) => `| ${frame.video} | ${frame.index} | ${frame.approx_timecode} | reference-keyframes/${frame.video_slug}/${frame.file} | TODO |`).join("\n");
+  const segmentRows = segments.map((segment) => `| ${segment.segment_number} | ${segment.video} | ${segment.start_timecode}-${segment.end_timecode} | ${segment.previous_end_frame || "N/A"} | ${segment.start_frame} | ${segment.end_frame} | TODO |`).join("\n");
   return {
     "README.md": `# Recreation Pack
 
@@ -336,9 +414,12 @@ Use these files:
 
 - \`recreation-brief.md\`: concise remake brief for AI video tools or human creators.
 - \`shot-list.md\`: shot-by-shot reconstruction scaffold.
+- \`segment-plan.md\`: segment-by-segment generation plan with start/end continuity anchors.
 - \`prompts.md\`: master and per-shot prompt scaffold.
+- \`continuity-locks.md\`: identity, scene, motion, style, and transition locks for multi-segment generation.
 - \`modification-plan.md\`: preserve/change plan.
 - \`reference-keyframes/\`: frame images to use as visual references.
+- \`segments/\`: per-segment start/end frames and previous-segment anchor frames.
 - \`recreation-manifest.json\`: machine-readable package inventory.
 
 The full evidence set remains one level up in \`../keyframes/\`, \`../keyframes-index.md\`, and \`../recreate-report.md\`.
@@ -382,11 +463,40 @@ Use \`reference-keyframes/\` as the visual input set for recreation.
 | --- | ---: | --- | --- | --- |
 ${frameRows}
 `,
+    "segment-plan.md": `# Segment Generation Plan
+
+AI video generation is usually done in short segments. Generate segments in order. For every segment after segment 1, use \`previous-segment-end-frame.jpg\` as the visual continuity anchor before following the new shot instructions.
+
+| Segment | Video | Time range | Previous end anchor | Segment start frame | Segment end frame | Generation notes |
+| ---: | --- | --- | --- | --- | --- | --- |
+${segmentRows}
+
+## Segment Rules
+
+1. Segment 1 establishes identity, environment, lighting, camera language, color, wardrobe/props, typography, and movement direction.
+2. Segment N must begin from the previous segment's end frame before evolving into its own action.
+3. Preserve subject identity, scale, pose trajectory, camera angle, lens feel, color grade, lighting direction, wardrobe/props, logo/text placement, and motion direction across boundaries.
+4. Only introduce requested changes at the segment where they are specified in \`modification-plan.md\`.
+5. After generating each segment, compare its first frame against the previous segment's end frame and reject if identity, scene, or camera continuity breaks.
+`,
     "prompts.md": `# AI Video Prompts
 
 ## Master Prompt
 
-TODO: Write one master prompt that preserves format, visual style, pacing, camera language, lighting, color, subject continuity, and narrative structure.
+TODO: Write one master prompt that preserves format, visual style, pacing, camera language, lighting, color, subject continuity, segment boundary continuity, and narrative structure.
+
+## Segment Prompt Template
+
+Use this template for each generated segment:
+
+\`\`\`text
+Generate segment {segment_number} from {start_timecode} to {end_timecode}.
+Reference frames: {segment_start_frame}, {segment_end_frame}.
+For segment 2 and later, first match {previous_segment_end_frame} exactly as continuity context: subject identity, pose, camera angle, lighting, color, wardrobe/props, typography, background, motion direction.
+Then continue into this segment's action: {segment_action}.
+Maintain the same visual DNA and pacing as the source video.
+Do not reset the scene, identity, camera, wardrobe, lighting, or text style at the segment boundary.
+\`\`\`
 
 ## Per-Shot Prompts
 
@@ -401,6 +511,34 @@ TODO: List artifacts to avoid, including inconsistent identity, extra limbs, inc
 ## Continuity Constraints
 
 TODO: List continuity constraints for characters, products, logos, props, color, wardrobe, location, and typography.
+`,
+    "continuity-locks.md": `# Continuity Locks
+
+Use this file as the control layer for segmented AI video generation.
+
+## Boundary Rule
+
+Every segment after segment 1 must use the previous segment's end frame as its starting visual anchor. The first visible moment of the new segment should match the previous segment's final state before continuing motion.
+
+## Lock These Across Segments
+
+- Subject identity and physical proportions.
+- Wardrobe, product details, props, logos, and text styling.
+- Location, background geometry, and object positions unless the shot intentionally changes.
+- Camera angle, lens feel, framing, motion direction, and movement speed.
+- Lighting direction, contrast, color grade, texture, and exposure.
+- Caption style, typography, placement, and animation rhythm.
+- Narrative cause/effect between segment ending and next segment beginning.
+
+## Boundary QA
+
+For each segment boundary:
+
+| Boundary | Previous end frame | Next start frame | Pass/fail | Repair prompt |
+| --- | --- | --- | --- | --- |
+${segments.filter((segment) => segment.previous_end_frame).map((segment) => `| ${segment.segment_number - 1} -> ${segment.segment_number} | ${segment.previous_end_frame} | ${segment.start_frame} | TODO | TODO |`).join("\n")}
+
+If continuity fails, regenerate the later segment with a stricter instruction to match the previous end frame before adding new motion.
 `,
     "modification-plan.md": `# Modification Plan
 
@@ -423,9 +561,10 @@ TODO: Define how to check whether the recreation still matches the source struct
   };
 }
 
-function createChineseRecreationPackFiles(manifest, frameIndex) {
+function createChineseRecreationPackFiles(manifest, frameIndex, segments) {
   const videoLines = manifest.videos.map((video) => `- ${video.file}: ${video.metadata.duration_seconds}s, ${video.metadata.width}x${video.metadata.height}, ${video.frame_count} 张参考帧`).join("\n");
   const frameRows = frameIndex.map((frame) => `| ${frame.video} | ${frame.index} | ${frame.approx_timecode} | reference-keyframes/${frame.video_slug}/${frame.file} | TODO |`).join("\n");
+  const segmentRows = segments.map((segment) => `| ${segment.segment_number} | ${segment.video} | ${segment.start_timecode}-${segment.end_timecode} | ${segment.previous_end_frame || "无"} | ${segment.start_frame} | ${segment.end_frame} | TODO |`).join("\n");
   return {
     "README.md": `# 视频复刻独立包
 
@@ -435,9 +574,12 @@ function createChineseRecreationPackFiles(manifest, frameIndex) {
 
 - \`recreation-brief.md\`：复刻任务简报。
 - \`shot-list.md\`：分镜/镜头清单。
+- \`segment-plan.md\`：分段生成计划，包含起止帧和前段结束帧锚点。
 - \`prompts.md\`：master prompt 和逐镜头 prompt。
+- \`continuity-locks.md\`：多段生成时的身份、场景、运动、风格和边界连续性锁定规则。
 - \`modification-plan.md\`：保留项、可修改项和用户修改要求。
 - \`reference-keyframes/\`：用于复刻参考的关键帧图片。
+- \`segments/\`：每段的起始帧、结束帧和上一段结束帧锚点。
 - \`recreation-manifest.json\`：机器可读的复刻包清单。
 
 完整证据集仍在上一级目录：\`../keyframes/\`、\`../keyframes-index.md\` 和 \`../recreate-report.md\`。
@@ -481,11 +623,40 @@ TODO：列出用户要求修改的内容，以及影响哪些镜头。
 | --- | ---: | --- | --- | --- |
 ${frameRows}
 `,
+    "segment-plan.md": `# 分段生成计划
+
+AI 视频通常需要分段生成。请按顺序生成每一段。第 2 段及之后的每一段，都必须先使用 \`previous-segment-end-frame.jpg\` 作为视觉连续性锚点，再进入本段动作。
+
+| 段落 | 视频 | 时间范围 | 上一段结束帧锚点 | 本段起始帧 | 本段结束帧 | 生成备注 |
+| ---: | --- | --- | --- | --- | --- | --- |
+${segmentRows}
+
+## 分段规则
+
+1. 第 1 段建立人物/产品身份、环境、光线、镜头语言、色彩、服装/道具、字幕样式和运动方向。
+2. 第 N 段必须先继承上一段结束帧的状态，再发展本段动作。
+3. 跨段保持主体身份、比例、姿态轨迹、镜头角度、镜头质感、色彩、光线方向、服装/道具、Logo/文字位置和运动方向。
+4. 只有在 \`modification-plan.md\` 指定的段落，才引入用户要求的改动。
+5. 每段生成后，比较本段首帧与上一段尾帧；如果身份、场景或镜头连续性断裂，应重生成后段。
+`,
     "prompts.md": `# AI 视频生成 Prompt
 
 ## Master Prompt
 
-TODO：写一个总 prompt，保留原视频的格式、视觉风格、节奏、镜头语言、光线、色彩、主体连续性和叙事结构。
+TODO：写一个总 prompt，保留原视频的格式、视觉风格、节奏、镜头语言、光线、色彩、主体连续性、分段边界连续性和叙事结构。
+
+## 分段 Prompt 模板
+
+每段生成时使用这个模板：
+
+\`\`\`text
+生成第 {segment_number} 段，时间范围 {start_timecode} 到 {end_timecode}。
+参考帧：{segment_start_frame}、{segment_end_frame}。
+第 2 段及之后，必须先精确匹配 {previous_segment_end_frame} 作为连续性上下文：主体身份、姿态、镜头角度、光线、色彩、服装/道具、字体、背景、运动方向。
+然后继续进入本段动作：{segment_action}。
+保持与原视频一致的视觉 DNA 和节奏。
+不要在分段边界重置场景、身份、镜头、服装、光线或文字风格。
+\`\`\`
 
 ## 逐镜头 Prompt
 
@@ -500,6 +671,34 @@ TODO：列出需要避免的问题，例如身份不一致、多余肢体、错�
 ## 连续性约束
 
 TODO：列出人物、产品、Logo、道具、色彩、服装、地点、字体和字幕的连续性要求。
+`,
+    "continuity-locks.md": `# 连续性锁定规则
+
+这个文件是分段 AI 视频生成的控制层。
+
+## 边界规则
+
+第 1 段之后的每一段，都必须使用上一段结束帧作为起始视觉锚点。新段落的第一个可见状态应先匹配上一段最后状态，然后再继续运动。
+
+## 跨段锁定项
+
+- 主体身份和身体/产品比例。
+- 服装、产品细节、道具、Logo 和文字样式。
+- 地点、背景几何关系和物体位置，除非镜头明确切换。
+- 镜头角度、镜头质感、构图、运动方向和运动速度。
+- 光线方向、对比度、色彩风格、材质感和曝光。
+- 字幕样式、字体、位置和动画节奏。
+- 上一段结尾与下一段开头之间的叙事因果关系。
+
+## 边界 QA
+
+逐个检查分段边界：
+
+| 边界 | 上一段结束帧 | 下一段起始帧 | 通过/失败 | 修复 prompt |
+| --- | --- | --- | --- | --- |
+${segments.filter((segment) => segment.previous_end_frame).map((segment) => `| ${segment.segment_number - 1} -> ${segment.segment_number} | ${segment.previous_end_frame} | ${segment.start_frame} | TODO | TODO |`).join("\n")}
+
+如果连续性失败，重生成后段，并加强“先匹配上一段结束帧，再进入新动作”的提示。
 `,
     "modification-plan.md": `# 修改方案
 

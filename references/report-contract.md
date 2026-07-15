@@ -43,20 +43,41 @@ Confirm the independent pack exists and is usable:
 - `output/recreation-pack/README.md`
 - `output/recreation-pack/recreation-brief.md`
 - `output/recreation-pack/shot-list.md`
+- `output/recreation-pack/segment-plan.md`
 - `output/recreation-pack/prompts.md`
+- `output/recreation-pack/continuity-locks.md`
 - `output/recreation-pack/modification-plan.md`
 - `output/recreation-pack/reference-keyframes/`
+- `output/recreation-pack/segments/`
 - `output/recreation-pack/recreation-manifest.json`
 
 The report should explain that this is the preferred handoff folder for actual recreation work.
 
-### 4. Executive Summary
+### 4. Segment Continuity Plan
+
+AI recreation is usually generated in short segments. Include continuity instructions:
+
+- Segment 1 establishes identity, environment, lens/camera language, lighting, color, wardrobe/props, typography, and motion direction.
+- Segment 2 and later must use the previous segment's end frame as the next segment's starting continuity anchor.
+- The next segment must first match the previous segment's ending state before continuing into its own action.
+- Segment prompts must lock identity, scale, pose trajectory, camera angle, lens feel, lighting direction, color grade, background geometry, wardrobe/props, text style, and motion direction.
+- Requested modifications should begin only at explicitly named segments.
+
+Reference:
+
+- `output/recreation-pack/segment-plan.md`
+- `output/recreation-pack/continuity-locks.md`
+- `output/recreation-pack/segments/<segment-id>/previous-segment-end-frame.jpg`
+- `output/recreation-pack/segments/<segment-id>/start-frame.jpg`
+- `output/recreation-pack/segments/<segment-id>/end-frame.jpg`
+
+### 5. Executive Summary
 
 - One-paragraph description of what the video is.
 - Target audience and probable commercial/creative purpose.
 - The most important visual and narrative features to preserve.
 
-### 5. Timeline Reconstruction
+### 6. Timeline Reconstruction
 
 Create a table with one row per meaningful shot or beat:
 
@@ -65,7 +86,7 @@ Create a table with one row per meaningful shot or beat:
 
 Merge adjacent extracted frames only when they clearly belong to the same shot.
 
-### 6. Visual DNA
+### 7. Visual DNA
 
 Describe:
 
@@ -77,7 +98,7 @@ Describe:
 - Character or object continuity.
 - Graphic overlays, captions, lower thirds, UI, typography, and logo placement.
 
-### 7. Script Reconstruction
+### 8. Script Reconstruction
 
 Write a remake script with:
 
@@ -89,16 +110,17 @@ Write a remake script with:
 - Transition to the next beat.
 - Evidence frame references.
 
-### 8. AI Recreation Prompt Pack
+### 9. AI Recreation Prompt Pack
 
 Provide:
 
 - A master prompt preserving the video's format, subject, style, pacing, and camera language.
+- A segment prompt template that tells later segments to use the previous segment's end frame as continuity context.
 - Per-shot prompts for generation or editing.
 - Negative prompts for visual artifacts to avoid.
 - Continuity constraints for characters, products, logos, props, color, and location.
 
-### 9. Modification Plan
+### 10. Modification Plan
 
 Separate:
 
@@ -109,7 +131,7 @@ Separate:
 
 For each change, state which shots are affected and how to adjust prompts/scripts.
 
-### 10. Gaps and QA
+### 11. Gaps and QA
 
 List anything that blocks a faithful recreation:
 

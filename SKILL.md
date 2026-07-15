@@ -85,12 +85,27 @@ The recreation pack contains:
 - `README.md`: how to use the pack.
 - `recreation-brief.md`: compact remake brief.
 - `shot-list.md`: shot-by-shot scaffold with reference-frame links.
+- `segment-plan.md`: segment-by-segment generation plan with start/end frames and previous-end-frame continuity anchors.
 - `prompts.md`: master prompt, per-shot prompt, negative prompt, and continuity constraints.
+- `continuity-locks.md`: rules for identity, scene, camera, motion, style, and boundary continuity.
 - `modification-plan.md`: preserve/change plan.
 - `reference-keyframes/`: copied keyframes for recreation input.
+- `segments/`: per-segment start frame, end frame, and previous-segment-end anchor files.
 - `recreation-manifest.json`: machine-readable pack inventory.
 
 If a contact sheet is also generated, treat it as a navigation aid. It does not replace the individual keyframe files.
+
+## Segment Continuity
+
+AI video recreation is usually generated in short segments. The recreation pack must preserve continuity across segment boundaries:
+
+- Segment 1 establishes the stable identity, scene, camera language, lighting, color, typography, wardrobe/props, and motion direction.
+- Segment 2 and later must use the previous segment's `end-frame.jpg` as `previous-segment-end-frame.jpg`.
+- The later segment should first match the previous segment's final state, then continue into the new action.
+- Segment prompts must explicitly lock identity, pose trajectory, camera angle, lens feel, lighting, color grade, wardrobe/props, background geometry, text style, and motion direction.
+- Requested changes should be introduced only in the segment where the modification plan says they begin.
+
+Use `output/recreation-pack/segment-plan.md` and `output/recreation-pack/continuity-locks.md` as the control files for segmented generation.
 
 ## Report Creation
 
@@ -109,6 +124,7 @@ The report must include:
 - Source inventory and technical metadata.
 - Delivered keyframes and an index that links frame files to observations.
 - Independent recreation pack with brief, shot list, prompts, modification plan, and reference keyframes.
+- Segment continuity plan with previous-end-frame anchors for multi-part AI video generation.
 - Frame-by-frame visual observations.
 - Shot sequence with timestamps, camera movement, composition, lighting, subject/action, and text overlays.
 - Narrative/script reconstruction including voiceover, dialogue, captions, on-screen text, beats, and transitions.
