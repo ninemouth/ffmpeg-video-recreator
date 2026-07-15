@@ -12,12 +12,21 @@ import { fileURLToPath } from "node:url";
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const skillRoot = path.resolve(scriptDir, "..");
 const defaultVenv = path.join(skillRoot, ".venv-audio");
+const defaultModelDir = path.join(skillRoot, ".models", "whisper.cpp");
 
 const profiles = {
   signal: ["numpy", "scipy", "soundfile", "librosa"],
+  "asr-whisper-cpp": [],
   "asr-faster-whisper": ["faster-whisper"],
   "asr-openai-whisper": ["openai-whisper"],
   events: ["tensorflow", "tensorflow-hub"]
+};
+
+const whisperCppModels = {
+  tiny: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin",
+  base: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin",
+  small: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin",
+  medium: "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-medium.bin"
 };
 
 function parseArgs(argv) {
@@ -66,6 +75,16 @@ function run(command, args, options = {}) {
   return result;
 }
 
+function tryRun(command, args, options = {}) {
+  console.log(`$ ${command} ${args.join(" ")}`);
+  return spawnSync(command, args, {
+    cwd: options.cwd || skillRoot,
+    stdio: options.stdio || "inherit",
+    encoding: "utf8",
+    maxBuffer: 100 * 1024 * 1024
+  });
+}
+
 function selectedProfiles(value) {
   const raw = String(value || "signal")
     .split(",")
@@ -96,6 +115,55 @@ function moduleChecks(profileNames) {
   return [...checks];
 }
 
+function whisperCppCommand() {
+  return ["whisper-cli", "whisper-cpp", "main"].find(commandExists) || null;
+}
+
+async function installWhisperCpp(modelName) {
+  const result = {
+    command_before: whisperCppCommand(),
+    command_after: null,
+    model: null,
+    installed_with: null,
+    status: "skipped",
+    reason: ""
+  };
+
+  if (!result.command_before && process.platform === "darwin" && commandExists("brew")) {
+    const brewResult = tryRun("brew", ["install", "whisper-cpp"]);
+    if (brewResult.status === 0) {
+      result.installed_with = "homebrew";
+    } else {
+      result.reason = "brew_install_whisper_cpp_failed";
+    }
+  } else if (!result.command_before) {
+    result.reason = "no_supported_automatic_whisper_cpp_installer";
+  }
+
+  result.command_after = whisperCppCommand();
+  if (!result.command_after) {
+    result.status = "skipped";
+    return result;
+  }
+
+  const selectedModel = whisperCppModels[modelName] ? modelName : "small";
+  await mkdir(defaultModelDir, { recursive: true });
+  const modelPath = path.join(defaultModelDir, `ggml-${selectedModel}.bin`);
+  if (!existsSync(modelPath)) {
+    if (!commandExists("curl")) {
+      result.status = "partial";
+      result.reason = "curl_not_found_for_model_download";
+      return result;
+    }
+    run("curl", ["-L", "--fail", "-o", modelPath, whisperCppModels[selectedModel]]);
+  }
+
+  result.model = modelPath;
+  result.status = "installed";
+  result.reason = result.command_before ? "already_available" : "installed";
+  return result;
+}
+
 function checkModules(python, modules) {
   const status = {};
   for (const moduleName of modules) {
@@ -111,15 +179,23 @@ async function main() {
   const profileNames = selectedProfiles(args.profile || args.profiles || "signal");
   const packages = packageList(profileNames);
   const python = venvPython(venvDir);
+  const modelName = String(args.model || "small");
+  let whisperCpp = null;
 
-  if (!existsSync(python)) {
+  if (profileNames.includes("asr-whisper-cpp")) {
+    whisperCpp = await installWhisperCpp(modelName);
+  }
+
+  if (packages.length && !existsSync(python)) {
     const systemPython = basePython();
     if (!systemPython) throw new Error("python3/python is required to create the audio support venv.");
     run(systemPython, ["-m", "venv", venvDir]);
   }
 
-  run(python, ["-m", "pip", "install", "--upgrade", "pip", "setuptools", "wheel"]);
-  if (packages.length) run(python, ["-m", "pip", "install", ...packages]);
+  if (packages.length) {
+    run(python, ["-m", "pip", "install", "--upgrade", "pip", "setuptools", "wheel"]);
+    run(python, ["-m", "pip", "install", ...packages]);
+  }
 
   await mkdir(path.join(skillRoot, ".cache"), { recursive: true });
   const support = {
@@ -130,6 +206,7 @@ async function main() {
     python,
     profiles: profileNames,
     packages,
+    whisper_cpp: whisperCpp,
     modules: checkModules(python, moduleChecks(profileNames)),
     usage: {
       env: `FFMPEG_SKILL_AUDIO_PYTHON=${python}`,

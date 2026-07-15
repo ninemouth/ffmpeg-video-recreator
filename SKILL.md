@@ -36,13 +36,13 @@ This command runs three audio layers by default:
 
 No API provider is used by default. OCR, when used by the agent outside these scripts, is only a fallback for visible on-screen text and must not be described as speech recognition.
 
-If optional local Python support is missing, install it into the skill-owned venv instead of the system Python:
+If optional local Python support is missing, scripts auto-install it into the skill-owned venv instead of the system Python:
 
 ```bash
 node scripts/install-audio-support.mjs --profile signal
 ```
 
-Use `--profile asr-faster-whisper` only when the machine should run local faster-whisper ASR. Use `--profile events` only when local TensorFlow/YAMNet-style event classification is desired. The scripts auto-detect `.venv-audio`; a custom venv can be provided through `FFMPEG_SKILL_AUDIO_PYTHON`.
+Manual installation remains available for debugging, but the normal workflow should not require the user to run install commands first. The scripts auto-detect `.venv-audio`; a custom venv can be provided through `FFMPEG_SKILL_AUDIO_PYTHON`.
 
 4. Read `references/report-contract.md`, inspect the extracted frames and audio metadata, then fill the generated `output/recreate-report.md`.
 
@@ -169,6 +169,7 @@ Local ASR provider selection is hardware-aware:
 - NVIDIA CUDA prefers `faster-whisper`, then Qwen3-ASR, then whisper.cpp fallback.
 - Qwen3-ASR is an advanced optional CUDA provider.
 - API providers are disabled by default.
+- In `auto` mode, missing local ASR support is installed automatically when a supported installer exists: Apple Silicon/CPU attempts `whisper.cpp` plus a local ggml model; NVIDIA attempts `faster-whisper`.
 
 OCR remains a visible-text-only fallback. It can read captions, overlays, titles, product text, and UI text in frames. It must not be used to infer speech when ASR is unavailable.
 

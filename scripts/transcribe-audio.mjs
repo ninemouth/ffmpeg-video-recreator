@@ -93,6 +93,12 @@ function detectProviders(hardware) {
   };
 }
 
+function localWhisperCppModel(quality) {
+  const modelName = quality === "low" ? "base" : quality === "best" || quality === "quality" ? "medium" : "small";
+  const modelPath = path.join(skillRoot, ".models", "whisper.cpp", `ggml-${modelName}.bin`);
+  return existsSync(modelPath) ? modelPath : "";
+}
+
 function chooseProvider(requested, providers, hardware) {
   if (requested && requested !== "auto") {
     return { selected: requested, reason: "user_requested" };
@@ -116,13 +122,46 @@ function chooseProvider(requested, providers, hardware) {
 }
 
 function defaultModel(provider, quality, hardware) {
-  if (provider === "whisper.cpp") return process.env.WHISPER_CPP_MODEL || (quality === "low" ? "base" : "small");
+  if (provider === "whisper.cpp") return process.env.WHISPER_CPP_MODEL || localWhisperCppModel(quality) || path.join(skillRoot, ".models", "whisper.cpp", `ggml-${quality === "low" ? "base" : "small"}.bin`);
   if (provider === "qwen3-asr") return quality === "best" ? "Qwen/Qwen3-ASR-1.7B" : "Qwen/Qwen3-ASR-0.6B";
   if (hardware.nvidia_cuda && ["quality", "best"].includes(quality)) return "large-v3";
   if (hardware.apple_silicon && ["quality", "best"].includes(quality)) return "medium";
   if (quality === "low") return "base";
   if (quality === "quality" || quality === "best") return "medium";
   return "small";
+}
+
+function autoInstallProfileFor(requestedProvider, hardware) {
+  if (requestedProvider === "none") return null;
+  if (requestedProvider === "whisper.cpp") return "asr-whisper-cpp";
+  if (requestedProvider === "faster-whisper") return "asr-faster-whisper";
+  if (requestedProvider === "openai-whisper") return "asr-openai-whisper";
+  if (requestedProvider === "qwen3-asr") return null;
+  if (hardware.nvidia_cuda) return "asr-faster-whisper";
+  if (hardware.apple_silicon || process.arch === "arm64") return "asr-whisper-cpp";
+  return "asr-whisper-cpp";
+}
+
+function modelNameForQuality(quality) {
+  if (quality === "low") return "base";
+  if (quality === "quality" || quality === "best") return "medium";
+  return "small";
+}
+
+function autoInstallAsr(profile, quality) {
+  if (!profile || process.env.FFMPEG_SKILL_AUTO_INSTALL === "false") return { status: "skipped", reason: "auto_install_disabled_or_no_profile" };
+  const installer = path.join(scriptDir, "install-audio-support.mjs");
+  if (!existsSync(installer)) return { status: "skipped", reason: "installer_missing" };
+  const result = run(process.execPath, [installer, "--profile", profile, "--model", modelNameForQuality(quality)], {
+    cwd: skillRoot,
+    maxBuffer: 200 * 1024 * 1024
+  });
+  return {
+    status: result.status === 0 ? "completed" : "failed",
+    profile,
+    stdout: result.status === 0 ? result.stdout.trim().slice(-4000) : "",
+    stderr: result.status === 0 ? "" : result.stderr.trim().slice(-4000)
+  };
 }
 
 function whisperCppModelUsable(model) {
@@ -276,8 +315,14 @@ async function main() {
 
   const wavs = await listWavs(runDir);
   const hardware = detectHardware();
-  const providers = detectProviders(hardware);
+  let providers = detectProviders(hardware);
   let choice = chooseProvider(requestedProvider, providers, hardware);
+  let autoInstall = null;
+  if (requestedProvider !== "none" && wavs.length && (!choice.selected || (choice.selected === "whisper.cpp" && !whisperCppModelUsable(defaultModel(choice.selected, quality, hardware))))) {
+    autoInstall = autoInstallAsr(autoInstallProfileFor(requestedProvider, hardware), quality);
+    providers = detectProviders(hardware);
+    choice = chooseProvider(requestedProvider, providers, hardware);
+  }
   if (requestedProvider === "none") choice = { selected: null, reason: "user_disabled_asr" };
   const model = args.model && args.model !== "auto" ? String(args.model) : defaultModel(choice.selected, quality, hardware);
   const payload = {
@@ -290,7 +335,8 @@ async function main() {
       selected: choice.selected,
       reason: wavs.length ? choice.reason : "no_extracted_audio_wav_found",
       fallbackEnabled: args.fallback !== false,
-      detectedProviders: providers
+      detectedProviders: providers,
+      autoInstall
     },
     hardware,
     model: {

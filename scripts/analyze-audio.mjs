@@ -210,9 +210,13 @@ async function runEbur128(audioPath) {
 
 async function runLibrosaOptional(audioPath) {
   const python = pythonCommand();
-  if (!python) return skipped("python_not_found");
-  const probe = spawnSync(python, ["-c", "import librosa, json"], { encoding: "utf8" });
-  if (probe.status !== 0) return skipped("librosa_not_installed");
+  if (!python || !pythonHasModule(python, "librosa")) {
+    await autoInstallAudioSupport("signal");
+  }
+  const readyPython = pythonCommand();
+  if (!readyPython) return skipped("python_not_found");
+  const probe = spawnSync(readyPython, ["-c", "import librosa, json"], { encoding: "utf8" });
+  if (probe.status !== 0) return skipped("librosa_not_installed_after_auto_install", probe.stderr.trim());
 
   const code = `
 import json, sys
@@ -234,9 +238,29 @@ print(json.dumps({
   "zero_crossing_rate_mean": float(zcr.mean())
 }, ensure_ascii=False))
 `;
-  const result = spawnSync(python, ["-c", code, audioPath], { encoding: "utf8", maxBuffer: 1024 * 1024 * 20 });
+  const result = spawnSync(readyPython, ["-c", code, audioPath], { encoding: "utf8", maxBuffer: 1024 * 1024 * 20 });
   if (result.status !== 0) return skipped("librosa_failed", result.stderr.trim());
   return JSON.parse(result.stdout);
+}
+
+async function autoInstallAudioSupport(profile) {
+  if (process.env.FFMPEG_SKILL_AUTO_INSTALL === "false") return false;
+  const installer = path.join(scriptDir, "install-audio-support.mjs");
+  if (!existsSync(installer)) return false;
+  const result = spawnSync(process.execPath, [installer, "--profile", profile], {
+    cwd: skillRoot,
+    encoding: "utf8",
+    maxBuffer: 100 * 1024 * 1024
+  });
+  if (result.status !== 0) {
+    console.error(result.stderr || result.stdout);
+    return false;
+  }
+  return true;
+}
+
+function pythonHasModule(python, moduleName) {
+  return spawnSync(python, ["-c", `import ${moduleName}`], { encoding: "utf8" }).status === 0;
 }
 
 function pythonCommand() {

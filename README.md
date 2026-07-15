@@ -165,9 +165,12 @@ node scripts/transcribe-audio.mjs --run "work/runs/<run-id>" --provider auto --m
 node scripts/classify-audio-events.mjs --run "work/runs/<run-id>" --provider auto --language zh
 ```
 
-`install-audio-support.mjs` 会在 skill 目录创建 `.venv-audio/`，默认安装非 AI 音频增强依赖：`numpy`、`scipy`、`soundfile`、`librosa`。脚本会自动优先使用这个 venv，不污染系统 Python。可选 profile：
+正常主流程不要求用户预先执行安装命令。`analyze-audio.mjs` 会在缺少 `librosa` 时自动安装 `signal` profile；`transcribe-audio.mjs` 在 `auto` 模式下会按硬件自动尝试安装合适的本地 ASR provider：Apple Silicon/CPU 优先 `whisper.cpp` + 本地 ggml 模型，NVIDIA CUDA 优先 `faster-whisper`。
+
+`install-audio-support.mjs` 是调试和显式预安装入口，会在 skill 目录创建 `.venv-audio/` 和 `.models/`，不污染系统 Python。可选 profile：
 
 - `--profile signal`：安装 librosa 等节奏/频谱分析依赖，推荐默认安装。
+- `--profile asr-whisper-cpp`：在 macOS/Homebrew 环境自动安装 `whisper.cpp`，并下载本地 ggml 模型。Apple Silicon/CPU 的最低硬件门槛方案。
 - `--profile asr-faster-whisper`：安装本地 faster-whisper ASR，适合 NVIDIA CUDA 或愿意 CPU int8 跑 ASR 的机器。
 - `--profile asr-openai-whisper`：安装 OpenAI Whisper Python 本地包。
 - `--profile events`：安装 TensorFlow / TensorFlow Hub，给后续 YAMNet 类本地声音事件模型准备环境。
@@ -176,6 +179,7 @@ node scripts/classify-audio-events.mjs --run "work/runs/<run-id>" --provider aut
 本地 ASR 自动选择策略：
 
 - CPU / Apple Silicon：优先 `whisper.cpp`。`whisper.cpp` 需要通过 `--model /path/to/model.bin` 或 `WHISPER_CPP_MODEL` 指定本地模型文件。
+- 主流程 auto 模式会优先使用 skill 自己下载到 `.models/whisper.cpp/` 的模型，因此通常不需要手动设置 `WHISPER_CPP_MODEL`。
 - NVIDIA CUDA：优先 `faster-whisper`，然后 Qwen3-ASR，再回退到 `whisper.cpp`。
 - Qwen3-ASR 是 CUDA 机器上的高级可选 provider。
 - API provider 默认禁用，本项目不会在自动流程里调用 API。
@@ -410,9 +414,12 @@ node scripts/transcribe-audio.mjs --run "work/runs/<run-id>" --provider auto --m
 node scripts/classify-audio-events.mjs --run "work/runs/<run-id>" --provider auto --language en
 ```
 
-`install-audio-support.mjs` creates `.venv-audio/` inside the skill and installs local optional support packages there. The default `signal` profile installs `numpy`, `scipy`, `soundfile`, and `librosa` for non-AI rhythm/spectrum analysis without polluting system Python. Optional profiles:
+The normal workflow does not require users to pre-run install commands. `analyze-audio.mjs` auto-installs the `signal` profile when `librosa` is missing; `transcribe-audio.mjs` auto-installs the best local ASR provider for the hardware in `auto` mode: Apple Silicon/CPU prefer `whisper.cpp` plus a local ggml model, while NVIDIA CUDA prefers `faster-whisper`.
+
+`install-audio-support.mjs` is still available for debugging and explicit pre-installation. It creates `.venv-audio/` and `.models/` inside the skill without polluting system Python. Optional profiles:
 
 - `--profile signal`: librosa-based rhythm/spectrum analysis; recommended default.
+- `--profile asr-whisper-cpp`: install `whisper.cpp` with Homebrew on macOS and download a local ggml model. Lowest hardware requirement for Apple Silicon/CPU.
 - `--profile asr-faster-whisper`: local faster-whisper ASR for NVIDIA CUDA or CPU int8 users.
 - `--profile asr-openai-whisper`: local OpenAI Whisper Python package.
 - `--profile events`: TensorFlow / TensorFlow Hub for future local YAMNet-style event classification.
@@ -421,6 +428,7 @@ node scripts/classify-audio-events.mjs --run "work/runs/<run-id>" --provider aut
 Local ASR auto-selection:
 
 - CPU / Apple Silicon prefer `whisper.cpp`. `whisper.cpp` needs a local model path through `--model /path/to/model.bin` or `WHISPER_CPP_MODEL`.
+- In auto mode, the workflow uses the model downloaded into `.models/whisper.cpp/`, so `WHISPER_CPP_MODEL` is usually unnecessary.
 - NVIDIA CUDA prefers `faster-whisper`, then Qwen3-ASR, then `whisper.cpp`.
 - Qwen3-ASR is an advanced optional provider for CUDA-capable machines.
 - API providers are disabled by default and are not used by the automatic workflow.

@@ -116,7 +116,7 @@ const source = path.resolve(args.source || ".");
 const codexHome = process.env.CODEX_HOME || path.join(os.homedir(), ".codex");
 const target = path.resolve(args.dest || path.join(codexHome, "skills", skillName));
 const backupRoot = path.resolve(args["backup-root"] || path.join(codexHome, "skill-backups"));
-const excludes = new Set([".git", "node_modules", "work", "runs", ".cache", ".venv-audio", ".DS_Store", ".ffmpeg-video-recreator-release.json"]);
+const excludes = new Set([".git", "node_modules", "work", "runs", ".cache", ".venv-audio", ".models", ".DS_Store", ".ffmpeg-video-recreator-release.json"]);
 
 if (!existsSync(path.join(source, "SKILL.md"))) {
   throw new Error(`Source does not look like a Codex skill: ${source}`);
