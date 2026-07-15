@@ -170,10 +170,19 @@ Local ASR provider selection is hardware-aware:
 - Qwen3-ASR is an advanced optional CUDA provider.
 - API providers are disabled by default.
 - In `auto` mode, missing local ASR support is installed automatically when a supported installer exists: Apple Silicon/CPU attempts `whisper.cpp` plus a local ggml model; NVIDIA attempts `faster-whisper`.
+- In `auto` mode, missing local sound-event support is installed automatically when TensorFlow can run on the available Python/hardware. The default local event runner is YAMNet.
 
 OCR remains a visible-text-only fallback. It can read captions, overlays, titles, product text, and UI text in frames. It must not be used to infer speech when ASR is unavailable.
 
 Optional support libraries are installed by `scripts/install-audio-support.mjs` into `.venv-audio/`, which is excluded from git and skill sync backups. Do not install these packages into system Python unless the user explicitly asks.
+
+After installation/deployment changes, run:
+
+```bash
+npm run audio:self-check
+```
+
+The self-check creates a temporary synthetic video and verifies FFmpeg/librosa signal analysis, local ASR, and local YAMNet sound-event classification end to end. A supported machine should pass self-check without user setup commands.
 
 ## References
 

@@ -22,6 +22,7 @@
     "audio:install": "node scripts/install-audio-support.mjs",
     "audio:transcribe": "node scripts/transcribe-audio.mjs",
     "audio:events": "node scripts/classify-audio-events.mjs",
+    "audio:self-check": "node scripts/self-check-audio-support.mjs",
     "check:update": "node scripts/check-skill-update.mjs",
     "install:github": "node scripts/install-or-update-from-github.mjs",
     "update:github": "node scripts/install-or-update-from-github.mjs --update",

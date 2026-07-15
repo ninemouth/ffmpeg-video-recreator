@@ -52,7 +52,7 @@ function commandExists(command) {
 }
 
 function basePython() {
-  return ["python3", "python"].find(commandExists) || null;
+  return ["python3.12", "python3.11", "python3.10", "python3", "python"].find(commandExists) || null;
 }
 
 function venvPython(venvDir) {
@@ -113,6 +113,18 @@ function moduleChecks(profileNames) {
     }
   }
   return [...checks];
+}
+
+function pythonVersion(python) {
+  const result = spawnSync(python, ["-c", "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')"], { encoding: "utf8" });
+  return result.status === 0 ? result.stdout.trim() : "";
+}
+
+function assertPythonCompatible(python, profileNames) {
+  const version = pythonVersion(python);
+  if (profileNames.includes("events") && !["3.10", "3.11", "3.12"].includes(version)) {
+    throw new Error(`events profile requires Python 3.10-3.12 for TensorFlow compatibility; got ${version} at ${python}`);
+  }
 }
 
 function whisperCppCommand() {
@@ -193,7 +205,8 @@ async function main() {
   }
 
   if (packages.length) {
-    run(python, ["-m", "pip", "install", "--upgrade", "pip", "setuptools", "wheel"]);
+    assertPythonCompatible(python, profileNames);
+    run(python, ["-m", "pip", "install", "--upgrade", "pip", "setuptools<81", "wheel"]);
     run(python, ["-m", "pip", "install", ...packages]);
   }
 

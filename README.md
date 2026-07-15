@@ -165,7 +165,7 @@ node scripts/transcribe-audio.mjs --run "work/runs/<run-id>" --provider auto --m
 node scripts/classify-audio-events.mjs --run "work/runs/<run-id>" --provider auto --language zh
 ```
 
-正常主流程不要求用户预先执行安装命令。`analyze-audio.mjs` 会在缺少 `librosa` 时自动安装 `signal` profile；`transcribe-audio.mjs` 在 `auto` 模式下会按硬件自动尝试安装合适的本地 ASR provider：Apple Silicon/CPU 优先 `whisper.cpp` + 本地 ggml 模型，NVIDIA CUDA 优先 `faster-whisper`。
+正常主流程不要求用户预先执行安装命令。只要硬件和系统条件支持，skill 会自动安装、部署、运行并自检；只有确实不支持时才写入明确的 skipped reason。`analyze-audio.mjs` 会在缺少 `librosa` 时自动安装 `signal` profile；`transcribe-audio.mjs` 在 `auto` 模式下会按硬件自动尝试安装合适的本地 ASR provider：Apple Silicon/CPU 优先 `whisper.cpp` + 本地 ggml 模型，NVIDIA CUDA 优先 `faster-whisper`。`classify-audio-events.mjs` 会自动安装 TensorFlow / TensorFlow Hub 并运行本地 YAMNet 声音事件识别。
 
 `install-audio-support.mjs` 是调试和显式预安装入口，会在 skill 目录创建 `.venv-audio/` 和 `.models/`，不污染系统 Python。可选 profile：
 
@@ -175,6 +175,14 @@ node scripts/classify-audio-events.mjs --run "work/runs/<run-id>" --provider aut
 - `--profile asr-openai-whisper`：安装 OpenAI Whisper Python 本地包。
 - `--profile events`：安装 TensorFlow / TensorFlow Hub，给后续 YAMNet 类本地声音事件模型准备环境。
 - `--profile all`：安装以上全部，体积较大，不建议默认使用。
+
+完整本地音频能力自检：
+
+```bash
+npm run audio:self-check
+```
+
+自检会临时生成一个带音频的视频，并验证 FFmpeg/librosa 信号分析、whisper.cpp ASR、YAMNet 声音事件识别是否端到端可用。
 
 本地 ASR 自动选择策略：
 
@@ -414,7 +422,7 @@ node scripts/transcribe-audio.mjs --run "work/runs/<run-id>" --provider auto --m
 node scripts/classify-audio-events.mjs --run "work/runs/<run-id>" --provider auto --language en
 ```
 
-The normal workflow does not require users to pre-run install commands. `analyze-audio.mjs` auto-installs the `signal` profile when `librosa` is missing; `transcribe-audio.mjs` auto-installs the best local ASR provider for the hardware in `auto` mode: Apple Silicon/CPU prefer `whisper.cpp` plus a local ggml model, while NVIDIA CUDA prefers `faster-whisper`.
+The normal workflow does not require users to pre-run install commands. When hardware and system conditions support it, the skill should install, deploy, run, and self-check automatically; unsupported cases must write a clear skipped reason. `analyze-audio.mjs` auto-installs the `signal` profile when `librosa` is missing; `transcribe-audio.mjs` auto-installs the best local ASR provider for the hardware in `auto` mode: Apple Silicon/CPU prefer `whisper.cpp` plus a local ggml model, while NVIDIA CUDA prefers `faster-whisper`. `classify-audio-events.mjs` auto-installs TensorFlow / TensorFlow Hub and runs local YAMNet sound-event classification.
 
 `install-audio-support.mjs` is still available for debugging and explicit pre-installation. It creates `.venv-audio/` and `.models/` inside the skill without polluting system Python. Optional profiles:
 
@@ -424,6 +432,14 @@ The normal workflow does not require users to pre-run install commands. `analyze
 - `--profile asr-openai-whisper`: local OpenAI Whisper Python package.
 - `--profile events`: TensorFlow / TensorFlow Hub for future local YAMNet-style event classification.
 - `--profile all`: all optional packages; large, not recommended as the default.
+
+End-to-end local audio self-check:
+
+```bash
+npm run audio:self-check
+```
+
+The self-check creates a temporary synthetic video and verifies FFmpeg/librosa signal analysis, whisper.cpp ASR, and YAMNet sound-event classification.
 
 Local ASR auto-selection:
 

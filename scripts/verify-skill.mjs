@@ -18,6 +18,7 @@ const required = [
   "scripts/install-ffmpeg.mjs",
   "scripts/extract-keyframes.mjs",
   "scripts/install-audio-support.mjs",
+  "scripts/self-check-audio-support.mjs",
   "scripts/analyze-audio.mjs",
   "scripts/transcribe-audio.mjs",
   "scripts/classify-audio-events.mjs",
@@ -45,7 +46,7 @@ if (!skill.includes("scripts/extract-keyframes.mjs") || !skill.includes("referen
 }
 
 const pkg = JSON.parse(await readFile(path.join(root, "package.json"), "utf8"));
-for (const script of ["verify", "ffmpeg:check", "ffmpeg:install", "extract:keyframes", "audio:install", "audio:analyze", "audio:transcribe", "audio:events", "check:update", "install:github", "update:github", "sync:codex"]) {
+for (const script of ["verify", "ffmpeg:check", "ffmpeg:install", "extract:keyframes", "audio:install", "audio:analyze", "audio:transcribe", "audio:events", "audio:self-check", "check:update", "install:github", "update:github", "sync:codex"]) {
   if (!pkg.scripts?.[script]) throw new Error(`package.json missing script: ${script}`);
 }
 if (pkg.license !== "MIT") {
