@@ -11,6 +11,9 @@ The final delivery is the complete `output/` directory, not only a contact sheet
 - `output/keyframes-index.md`
 - `output/delivery-manifest.json`
 - `output/recreation-pack/`
+- `output/audio-analysis.md`
+- `output/speech-transcript.md`
+- `output/audio-events.md`
 
 Use `output/recreation-pack/` as the portable handoff package for AI video tools or creative operators. It should stand on its own even if the receiver does not inspect the whole run directory.
 
@@ -22,6 +25,7 @@ Use `output/recreation-pack/` as the portable handoff package for AI video tools
 - Run directory.
 - Video filenames.
 - Duration, resolution, frame rate, codec, audio stream presence.
+- Audio stream inventory, extracted WAV path, ASR provider status, and sound-event provider status when available.
 - Extraction mode and sampling parameters.
 - Output keyframe directory.
 - Keyframe index path.
@@ -97,6 +101,7 @@ Describe:
 - Set/location/product styling.
 - Character or object continuity.
 - Graphic overlays, captions, lower thirds, UI, typography, and logo placement.
+- Visible on-screen text from OCR if OCR was used. OCR must be marked as visible text only and must not replace ASR.
 
 ### 8. Script Reconstruction
 
@@ -107,6 +112,7 @@ Write a remake script with:
 - Visual direction.
 - Action.
 - Voiceover/dialogue/caption text, using `[inaudible]` or `[not visible]` when uncertain.
+- Speech transcript evidence from `metadata/speech-transcript.json` when local ASR completed; otherwise state that ASR was skipped and why.
 - Transition to the next beat.
 - Evidence frame references.
 
@@ -135,7 +141,7 @@ For each change, state which shots are affected and how to adjust prompts/script
 
 List anything that blocks a faithful recreation:
 
-- Missing audio analysis.
+- Missing audio analysis, ASR skipped status, or sound-event model skipped status.
 - Sparse frames.
 - Blurry or low-resolution frames.
 - Fast motion not captured.
@@ -143,3 +149,19 @@ List anything that blocks a faithful recreation:
 - Legal/brand likeness constraints.
 
 End with the exact files in the run directory that support the report.
+
+## Audio Evidence Rules
+
+Use these files when present:
+
+- `metadata/audio-streams.json`: audio-probe output from ffprobe and extracted WAV locations.
+- `metadata/audio-analysis.json`: non-AI signal analysis including silence, volume, loudness, RMS peaks, and optional librosa rhythm/spectrum.
+- `metadata/speech-transcript.json`: local ASR provider selection, hardware evidence, model, status, and transcript segments.
+- `metadata/audio-events.json`: local sound-event provider selection and skipped/completed status.
+- `output/audio-analysis.md`, `output/speech-transcript.md`, `output/audio-events.md`: human-readable summaries.
+
+Keep speech, visible text, and non-speech sound separate:
+
+- ASR is for spoken or sung words.
+- OCR is for visible on-screen text only.
+- Non-speech sound analysis comes from audio signal analysis and optional sound-event models.

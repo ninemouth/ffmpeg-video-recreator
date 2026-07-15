@@ -1,8 +1,12 @@
 #!/usr/bin/env node
+// Copyright (c) 2026 Yang Cao <cao.x.yang@gmail.com>
+// SPDX-License-Identifier: MIT
+
 import { spawn, spawnSync } from "node:child_process";
 import { copyFile, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
+import { fileURLToPath } from "node:url";
 
 const VIDEO_EXTENSIONS = new Set([".mp4", ".mov", ".m4v", ".avi", ".mkv", ".webm", ".wmv", ".flv"]);
 
@@ -120,6 +124,8 @@ async function main() {
   const language = normalizeLanguage(args.language || "auto");
   const copyKeyframes = args["no-copy-keyframes"] !== true;
   const segmentFrames = Math.max(2, Number(args["segment-frames"] || 4));
+  const analyzeAudio = args.audio !== "false" && args["no-audio"] !== true;
+  const audioAi = args["audio-ai"] !== "false";
 
   if (!input || !runDir) {
     console.error("Usage: node scripts/extract-keyframes.mjs --input <video-dir> --run <run-dir> [--mode hybrid|scene|interval] [--language zh|en|auto]");
@@ -224,6 +230,20 @@ async function main() {
   await writeFile(path.join(runDir, "output", "delivery-manifest.json"), `${JSON.stringify(createDeliveryManifest(manifest, frameIndex), null, 2)}\n`);
   await writeFile(path.join(runDir, "output", "recreate-report.md"), createReportTemplate(manifest, language), "utf8");
   await writeRecreationPack(runDir, manifest, frameIndex, language, segmentFrames);
+  const audioOutputs = analyzeAudio ? await runAudioPipeline(input, runDir, language, audioAi) : [];
+  if (audioOutputs.length) {
+    const deliveryManifest = createDeliveryManifest(manifest, frameIndex);
+    deliveryManifest.deliverables.audio = {
+      audio_streams: "metadata/audio-streams.json",
+      audio_analysis: "metadata/audio-analysis.json",
+      audio_analysis_report: "output/audio-analysis.md",
+      speech_transcript: "metadata/speech-transcript.json",
+      speech_transcript_report: "output/speech-transcript.md",
+      audio_events: "metadata/audio-events.json",
+      audio_events_report: "output/audio-events.md"
+    };
+    await writeFile(path.join(runDir, "output", "delivery-manifest.json"), `${JSON.stringify(deliveryManifest, null, 2)}\n`);
+  }
 
   console.log(JSON.stringify({
     run_directory: runDir,
@@ -236,9 +256,46 @@ async function main() {
       "output/recreation-pack/",
       "output/recreation-pack/segment-plan.md",
       "output/recreation-pack/continuity-locks.md",
+      ...audioOutputs,
       copyKeyframes ? "output/keyframes/" : "frames/"
     ]
   }, null, 2));
+}
+
+async function runAudioPipeline(input, runDir, language, audioAi) {
+  const outputs = [];
+  const audioResult = await run(process.execPath, [
+    path.join(path.dirname(fileURLToPath(import.meta.url)), "analyze-audio.mjs"),
+    "--input", input,
+    "--run", runDir,
+    "--language", language
+  ]);
+  if (audioResult.stdout.trim()) console.error(audioResult.stdout.trim());
+  outputs.push("metadata/audio-streams.json", "metadata/audio-analysis.json", "output/audio-analysis.md");
+
+  if (audioAi) {
+    const scriptDir = path.dirname(fileURLToPath(import.meta.url));
+    const transcriptResult = await run(process.execPath, [
+      path.join(scriptDir, "transcribe-audio.mjs"),
+      "--run", runDir,
+      "--provider", "auto",
+      "--model", "auto",
+      "--quality", "balanced",
+      "--language", language
+    ]);
+    if (transcriptResult.stdout.trim()) console.error(transcriptResult.stdout.trim());
+    outputs.push("metadata/speech-transcript.json", "output/speech-transcript.md");
+
+    const eventsResult = await run(process.execPath, [
+      path.join(scriptDir, "classify-audio-events.mjs"),
+      "--run", runDir,
+      "--provider", "auto",
+      "--language", language
+    ]);
+    if (eventsResult.stdout.trim()) console.error(eventsResult.stdout.trim());
+    outputs.push("metadata/audio-events.json", "output/audio-events.md");
+  }
+  return outputs;
 }
 
 function normalizeLanguage(value) {

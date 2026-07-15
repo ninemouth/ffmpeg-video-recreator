@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Copyright (c) 2026 Yang Cao <cao.x.yang@gmail.com>
+// SPDX-License-Identifier: MIT
+
 import { spawnSync } from "node:child_process";
 import process from "node:process";
 

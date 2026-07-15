@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Copyright (c) 2026 Yang Cao <cao.x.yang@gmail.com>
+// SPDX-License-Identifier: MIT
+
 import { mkdir, writeFile } from "node:fs/promises";
 import path from "node:path";
 
@@ -37,7 +40,7 @@ const runRoot = path.resolve(args.root || "work/runs");
 const runId = `${timestamp()}-${slugify(args.slug || path.basename(input) || "video-recreation")}`;
 const runDir = path.join(runRoot, runId);
 
-for (const dir of ["input", "frames", "metadata", "output", "qa"]) {
+for (const dir of ["input", "frames", "audio", "metadata", "output", "qa"]) {
   await mkdir(path.join(runDir, dir), { recursive: true });
 }
 

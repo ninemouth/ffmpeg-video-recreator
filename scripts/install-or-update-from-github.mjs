@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Copyright (c) 2026 Yang Cao <cao.x.yang@gmail.com>
+// SPDX-License-Identifier: MIT
+
 import { existsSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import os from "node:os";

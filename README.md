@@ -138,7 +138,7 @@ node scripts/install-ffmpeg.mjs --check
 node scripts/install-ffmpeg.mjs --install
 ```
 
-抽取关键帧：
+抽取关键帧并执行本地音频分析：
 
 ```bash
 node scripts/extract-keyframes.mjs \
@@ -150,15 +150,44 @@ node scripts/extract-keyframes.mjs \
   --scene-threshold 0.32
 ```
 
+这个命令默认会执行三层音频流程：
+
+1. `audio-probe`：用 `ffprobe` 获取音频轨，并用 `ffmpeg` 抽取 16 kHz mono WAV。
+2. `audio-signal-analysis`：用 FFmpeg/librosa 做静音、响度、峰值、节奏、频谱、音量曲线分析，不需要 AI/GPU。
+3. `optional-audio-ai`：本地离线探测 ASR 和声音事件模型；不可用时写入 `skipped`，不阻塞主流程。
+
+如需单独运行：
+
+```bash
+node scripts/analyze-audio.mjs --input "/path/to/video-folder" --run "work/runs/<run-id>" --language zh
+node scripts/transcribe-audio.mjs --run "work/runs/<run-id>" --provider auto --model auto --quality balanced --language zh
+node scripts/classify-audio-events.mjs --run "work/runs/<run-id>" --provider auto --language zh
+```
+
+本地 ASR 自动选择策略：
+
+- CPU / Apple Silicon：优先 `whisper.cpp`。`whisper.cpp` 需要通过 `--model /path/to/model.bin` 或 `WHISPER_CPP_MODEL` 指定本地模型文件。
+- NVIDIA CUDA：优先 `faster-whisper`，然后 Qwen3-ASR，再回退到 `whisper.cpp`。
+- Qwen3-ASR 是 CUDA 机器上的高级可选 provider。
+- API provider 默认禁用，本项目不会在自动流程里调用 API。
+- 没有可用本地 ASR 时，`metadata/speech-transcript.json` 会记录 `skipped`。
+
+OCR 只作为画面可见文字的备选能力：字幕、标题、贴纸字、商品文案、UI 文案等。OCR 不会替代语音识别，也不会被当作语音字幕来源。
+
 输出目录结构：
 
 ```text
 work/runs/<run-id>/
 ├── input/
 ├── frames/
+├── audio/
 ├── metadata/
 │   ├── manifest.json
 │   ├── frame-index.json
+│   ├── audio-streams.json
+│   ├── audio-analysis.json
+│   ├── speech-transcript.json
+│   ├── audio-events.json
 │   └── *.ffprobe.json
 ├── output/
 │   ├── keyframes/
@@ -168,6 +197,9 @@ work/runs/<run-id>/
 │   │   └── segments/
 │   ├── keyframes-index.md
 │   ├── delivery-manifest.json
+│   ├── audio-analysis.md
+│   ├── speech-transcript.md
+│   ├── audio-events.md
 │   └── recreate-report.md
 └── qa/
 ```
@@ -195,6 +227,7 @@ work/runs/<run-id>/
 - 关键帧交付目录和关键帧索引。
 - 独立复刻包目录和其中的 brief、shot list、prompts、修改方案、参考帧。
 - 分段生成连续性方案，包括前段结束帧锚点和 prompt 控制规则。
+- 音频证据：`audio-streams.json`、`audio-analysis.json`、`speech-transcript.json`、`audio-events.json`。
 - 视频整体总结。
 - 时间线和镜头拆解。
 - 画面风格、构图、光线、色彩、节奏、字幕和转场分析。
@@ -207,8 +240,10 @@ work/runs/<run-id>/
 
 ### 当前边界
 
-- 当前版本会检测音频流，但不会自动转写音频。
-- 旁白、对白、音乐和音效需要 Codex 根据可见字幕/画面进行标注，或后续接入 ASR/Whisper 类能力。
+- 非 AI 音频信号分析默认可用，但依赖本地 `ffmpeg`/`ffprobe`。
+- ASR 只使用本地离线 provider。没有 `whisper.cpp` 模型、`faster-whisper`、OpenAI Whisper Python 包或 Qwen3-ASR 本地环境时，会跳过语音转写。
+- 声音事件 AI provider 目前只做本地能力探测和 skipped 状态记录；仍可使用非 AI 音频信号分析判断静音、响度、峰值和节奏。
+- OCR 只用于画面可见文字，不替代 ASR。
 - 对快速运动或极快剪辑视频，可能需要调低 `--scene-threshold` 或缩短 `--interval`。
 
 ### 开发验证
@@ -339,7 +374,7 @@ Install FFmpeg if missing:
 node scripts/install-ffmpeg.mjs --install
 ```
 
-Extract keyframes:
+Extract keyframes and run local audio analysis:
 
 ```bash
 node scripts/extract-keyframes.mjs \
@@ -351,15 +386,44 @@ node scripts/extract-keyframes.mjs \
   --scene-threshold 0.32
 ```
 
+This command runs three audio layers by default:
+
+1. `audio-probe`: `ffprobe` inventories audio streams and `ffmpeg` extracts 16 kHz mono WAV files.
+2. `audio-signal-analysis`: FFmpeg/librosa analyze silence, loudness, peaks, rhythm, spectrum, and volume curves without AI/GPU.
+3. `optional-audio-ai`: local-only ASR and sound-event provider detection. Unsupported providers are written as `skipped` and never block the workflow.
+
+Run the layers manually:
+
+```bash
+node scripts/analyze-audio.mjs --input "/path/to/video-folder" --run "work/runs/<run-id>" --language en
+node scripts/transcribe-audio.mjs --run "work/runs/<run-id>" --provider auto --model auto --quality balanced --language en
+node scripts/classify-audio-events.mjs --run "work/runs/<run-id>" --provider auto --language en
+```
+
+Local ASR auto-selection:
+
+- CPU / Apple Silicon prefer `whisper.cpp`. `whisper.cpp` needs a local model path through `--model /path/to/model.bin` or `WHISPER_CPP_MODEL`.
+- NVIDIA CUDA prefers `faster-whisper`, then Qwen3-ASR, then `whisper.cpp`.
+- Qwen3-ASR is an advanced optional provider for CUDA-capable machines.
+- API providers are disabled by default and are not used by the automatic workflow.
+- If no local ASR provider is available, `metadata/speech-transcript.json` records `skipped`.
+
+OCR remains a visible-text-only fallback for captions, titles, stickers, product copy, and UI text. OCR is not used as a replacement for speech recognition.
+
 Output structure:
 
 ```text
 work/runs/<run-id>/
 ├── input/
 ├── frames/
+├── audio/
 ├── metadata/
 │   ├── manifest.json
 │   ├── frame-index.json
+│   ├── audio-streams.json
+│   ├── audio-analysis.json
+│   ├── speech-transcript.json
+│   ├── audio-events.json
 │   └── *.ffprobe.json
 ├── output/
 │   ├── keyframes/
@@ -369,6 +433,9 @@ work/runs/<run-id>/
 │   │   └── segments/
 │   ├── keyframes-index.md
 │   ├── delivery-manifest.json
+│   ├── audio-analysis.md
+│   ├── speech-transcript.md
+│   ├── audio-events.md
 │   └── recreate-report.md
 └── qa/
 ```
@@ -396,6 +463,7 @@ Use [references/report-contract.md](references/report-contract.md) as the report
 - Keyframe delivery directory and keyframe index.
 - Independent recreation pack with brief, shot list, prompts, modification plan, and reference frames.
 - Segment continuity plan with previous-end-frame anchors and prompt control rules.
+- Audio evidence from `audio-streams.json`, `audio-analysis.json`, `speech-transcript.json`, and `audio-events.json`.
 - Executive summary.
 - Timeline and shot-by-shot reconstruction.
 - Visual DNA: framing, motion, lighting, color, rhythm, captions, and transitions.
@@ -408,8 +476,10 @@ The report language should match the user's interaction language. Chinese reques
 
 ### Current Boundaries
 
-- The skill detects audio streams but does not transcribe audio yet.
-- Voiceover, dialogue, music, and sound effects require visible subtitle cues, visual inference, or a future ASR/Whisper extension.
+- Non-AI audio signal analysis is available by default and depends on local `ffmpeg`/`ffprobe`.
+- ASR is local-only. If no `whisper.cpp` model, `faster-whisper`, OpenAI Whisper Python package, or Qwen3-ASR local runtime is available, speech transcription is skipped.
+- Audio event AI currently records local provider detection and skipped status unless a local YAMNet/PANNs/CLAP runner is wired in. Non-AI signal analysis still covers silence, loudness, peaks, and rhythm.
+- OCR is visible-text-only and does not replace ASR.
 - For very fast edits, reduce `--scene-threshold` or shorten `--interval`.
 
 ### Development
@@ -426,6 +496,59 @@ Sync into local Codex skills:
 npm run sync:codex
 ```
 
+## Open Source Usage Guidelines / 开源使用规范
+
+This project is released under the MIT License. You may use, copy, modify,
+merge, publish, distribute, sublicense, and sell copies of this software,
+including commercial use, as long as you keep the copyright notice and license
+text in all copies or substantial portions of the software.
+
+Recommended attribution:
+
+```text
+FFmpeg Video Recreator
+Copyright (c) 2026 Yang Cao <cao.x.yang@gmail.com>
+Licensed under the MIT License.
+```
+
+When redistributing source files, keep the existing SPDX header where present:
+
+```text
+Copyright (c) 2026 Yang Cao <cao.x.yang@gmail.com>
+SPDX-License-Identifier: MIT
+```
+
+This project is provided as-is, without warranty. FFmpeg itself is a separate
+third-party project with its own license terms. If you install or redistribute
+FFmpeg, you are responsible for complying with the applicable FFmpeg build and
+codec licenses.
+
+本项目基于 MIT 许可证开源。你可以使用、复制、修改、合并、发布、分发、再许可和
+销售本软件副本，也可以用于商业用途；前提是在软件的所有副本或主要部分中保留版权
+声明和许可协议文本。
+
+建议保留以下署名：
+
+```text
+FFmpeg Video Recreator
+Copyright (c) 2026 Yang Cao <cao.x.yang@gmail.com>
+Licensed under the MIT License.
+```
+
+再次分发源代码文件时，请保留已有的 SPDX 头部声明：
+
+```text
+Copyright (c) 2026 Yang Cao <cao.x.yang@gmail.com>
+SPDX-License-Identifier: MIT
+```
+
+本项目按原样提供，不附带任何形式的担保。FFmpeg 是独立的第三方项目，拥有自己的
+许可证条款；如果安装或再分发 FFmpeg，请自行确认并遵守对应 FFmpeg 构建和编解码器
+许可证要求。
+
 ## License
 
-MIT
+MIT License. See [LICENSE](LICENSE) for the full English license text and a
+Chinese reference translation.
+
+Copyright (c) 2026 Yang Cao <cao.x.yang@gmail.com>

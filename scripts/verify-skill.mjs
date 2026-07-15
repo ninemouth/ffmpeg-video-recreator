@@ -1,8 +1,13 @@
 #!/usr/bin/env node
+// Copyright (c) 2026 Yang Cao <cao.x.yang@gmail.com>
+// SPDX-License-Identifier: MIT
+
 import { access, readFile } from "node:fs/promises";
 import path from "node:path";
 
 const root = process.cwd();
+const copyrightNotice = "Copyright (c) 2026 Yang Cao <cao.x.yang@gmail.com>";
+const spdxNotice = "SPDX-License-Identifier: MIT";
 const required = [
   "SKILL.md",
   "agents/openai.yaml",
@@ -12,6 +17,9 @@ const required = [
   "scripts/create-run-skeleton.mjs",
   "scripts/install-ffmpeg.mjs",
   "scripts/extract-keyframes.mjs",
+  "scripts/analyze-audio.mjs",
+  "scripts/transcribe-audio.mjs",
+  "scripts/classify-audio-events.mjs",
   "scripts/check-skill-update.mjs",
   "scripts/install-or-update-from-github.mjs",
   "scripts/sync-to-codex-skill.mjs",
@@ -36,11 +44,36 @@ if (!skill.includes("scripts/extract-keyframes.mjs") || !skill.includes("referen
 }
 
 const pkg = JSON.parse(await readFile(path.join(root, "package.json"), "utf8"));
-for (const script of ["verify", "ffmpeg:check", "ffmpeg:install", "extract:keyframes", "check:update", "install:github", "update:github", "sync:codex"]) {
+for (const script of ["verify", "ffmpeg:check", "ffmpeg:install", "extract:keyframes", "audio:analyze", "audio:transcribe", "audio:events", "check:update", "install:github", "update:github", "sync:codex"]) {
   if (!pkg.scripts?.[script]) throw new Error(`package.json missing script: ${script}`);
+}
+if (pkg.license !== "MIT") {
+  throw new Error("package.json license must be MIT.");
+}
+if (pkg.author?.name !== "Yang Cao" || pkg.author?.email !== "cao.x.yang@gmail.com") {
+  throw new Error("package.json author must be Yang Cao <cao.x.yang@gmail.com>.");
 }
 if (pkg.repository?.url !== "https://github.com/ninemouth/ffmpeg-video-recreator.git") {
   throw new Error("package.json repository URL must point to the public GitHub repo.");
+}
+
+const licenseText = await readFile(path.join(root, "LICENSE"), "utf8");
+for (const expected of [
+  "MIT License",
+  "MIT 许可证（中文参考译文）",
+  copyrightNotice,
+  "上方英文 MIT License 为正式许可文本"
+]) {
+  if (!licenseText.includes(expected)) {
+    throw new Error(`LICENSE is missing required text: ${expected}`);
+  }
+}
+
+for (const file of required.filter((entry) => entry.startsWith("scripts/"))) {
+  const source = await readFile(path.join(root, file), "utf8");
+  if (!source.includes(copyrightNotice) || !source.includes(spdxNotice)) {
+    throw new Error(`${file} is missing the required source license header.`);
+  }
 }
 
 console.log("All verification checks passed.");

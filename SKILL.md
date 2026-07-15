@@ -22,13 +22,21 @@ node scripts/install-ffmpeg.mjs --check
 node scripts/install-ffmpeg.mjs --install
 ```
 
-3. Extract keyframes from the source directory. Choose the report language from the user's interaction language: use `--language zh` for Chinese conversations, `--language en` for English conversations, and `--language auto` only when unclear.
+3. Extract keyframes and run the local audio pipeline from the source directory. Choose the report language from the user's interaction language: use `--language zh` for Chinese conversations, `--language en` for English conversations, and `--language auto` only when unclear.
 
 ```bash
 node scripts/extract-keyframes.mjs --input "/path/to/video-folder" --run "work/runs/<run-id>" --mode hybrid --language zh
 ```
 
-4. Read `references/report-contract.md`, inspect the extracted frames, then fill the generated `output/recreate-report.md`.
+This command runs three audio layers by default:
+
+- `audio-probe`: `ffprobe` audio stream inventory plus extracted 16 kHz mono WAV files under `audio/`.
+- `audio-signal-analysis`: local, non-AI FFmpeg/librosa analysis for silence, volume, loudness, RMS peaks, rhythm, and spectrum.
+- `optional-audio-ai`: local-only provider detection for speech ASR and sound-event models. Unsupported providers are written as `skipped` and never block keyframe delivery.
+
+No API provider is used by default. OCR, when used by the agent outside these scripts, is only a fallback for visible on-screen text and must not be described as speech recognition.
+
+4. Read `references/report-contract.md`, inspect the extracted frames and audio metadata, then fill the generated `output/recreate-report.md`.
 
 5. Deliver the complete `output/` package, not only a contact sheet or report.
 
@@ -42,6 +50,7 @@ Each task must stay inside one run directory:
 work/runs/<timestamp-slug>/
 ├── input/              # optional copied source assets or symlinks
 ├── frames/             # raw extracted keyframes grouped by video
+├── audio/              # extracted 16 kHz mono WAV files for local analysis/ASR
 ├── metadata/           # ffprobe, manifest, command log, frame index
 ├── output/             # final delivery package
 │   ├── keyframes/      # copied keyframes for delivery
@@ -79,6 +88,9 @@ The final user-facing delivery is the whole `output/` directory:
 - `output/keyframes-index.md`: human-readable keyframe index with visual-note placeholders.
 - `output/delivery-manifest.json`: machine-readable list of report, keyframes, metadata, and source video summaries.
 - `output/recreation-pack/`: independent package for handing to AI video tools or creative operators.
+- `output/audio-analysis.md`: non-AI audio signal summary when source audio exists.
+- `output/speech-transcript.md`: local ASR transcript or a clear skipped status.
+- `output/audio-events.md`: local sound-event AI status or a clear skipped status.
 
 The recreation pack contains:
 
@@ -132,6 +144,25 @@ The report must include:
 - Reproduction prompt pack for AI video generation.
 - Modification plan separating preserved elements from user-requested changes.
 - Risk notes for missing audio, unreadable text, blurry frames, or under-sampled scenes.
+- Audio evidence from `metadata/audio-streams.json`, `metadata/audio-analysis.json`, `metadata/speech-transcript.json`, and `metadata/audio-events.json`.
+- OCR notes only for visible on-screen text. Do not use OCR as a substitute for speech ASR.
+
+## Audio and OCR Policy
+
+Audio is handled in three separate layers:
+
+1. `audio-probe`: `ffprobe` records audio streams and `ffmpeg` extracts normalized WAV files.
+2. `audio-signal-analysis`: FFmpeg/librosa analyze silence, loudness, volume peaks, RMS curve, tempo, and spectrum without AI or GPU.
+3. `optional-audio-ai`: local speech ASR and sound-event providers are attempted only when available. Provider status must be written to JSON. Unsupported providers are skipped without blocking the rest of the workflow.
+
+Local ASR provider selection is hardware-aware:
+
+- CPU and Apple Silicon prefer `whisper.cpp`.
+- NVIDIA CUDA prefers `faster-whisper`, then Qwen3-ASR, then whisper.cpp fallback.
+- Qwen3-ASR is an advanced optional CUDA provider.
+- API providers are disabled by default.
+
+OCR remains a visible-text-only fallback. It can read captions, overlays, titles, product text, and UI text in frames. It must not be used to infer speech when ASR is unavailable.
 
 ## References
 
