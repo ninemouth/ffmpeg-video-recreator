@@ -10,6 +10,9 @@ The final delivery is the complete `output/` directory, not only a contact sheet
 - `output/keyframes/`
 - `output/keyframes-index.md`
 - `output/delivery-manifest.json`
+- `output/recreation-pack/`
+
+Use `output/recreation-pack/` as the portable handoff package for AI video tools or creative operators. It should stand on its own even if the receiver does not inspect the whole run directory.
 
 ## Required Sections
 
@@ -22,6 +25,7 @@ The final delivery is the complete `output/` directory, not only a contact sheet
 - Extraction mode and sampling parameters.
 - Output keyframe directory.
 - Keyframe index path.
+- Recreation pack path.
 
 ### 2. Keyframe Deliverables
 
@@ -32,13 +36,27 @@ List the extracted keyframes as formal evidence assets:
 
 Use `output/keyframes-index.md` and the individual image files as the source of truth. A contact sheet can help navigation, but it is not a substitute for individual keyframe deliverables.
 
-### 3. Executive Summary
+### 3. Recreation Pack
+
+Confirm the independent pack exists and is usable:
+
+- `output/recreation-pack/README.md`
+- `output/recreation-pack/recreation-brief.md`
+- `output/recreation-pack/shot-list.md`
+- `output/recreation-pack/prompts.md`
+- `output/recreation-pack/modification-plan.md`
+- `output/recreation-pack/reference-keyframes/`
+- `output/recreation-pack/recreation-manifest.json`
+
+The report should explain that this is the preferred handoff folder for actual recreation work.
+
+### 4. Executive Summary
 
 - One-paragraph description of what the video is.
 - Target audience and probable commercial/creative purpose.
 - The most important visual and narrative features to preserve.
 
-### 4. Timeline Reconstruction
+### 5. Timeline Reconstruction
 
 Create a table with one row per meaningful shot or beat:
 
@@ -47,7 +65,7 @@ Create a table with one row per meaningful shot or beat:
 
 Merge adjacent extracted frames only when they clearly belong to the same shot.
 
-### 5. Visual DNA
+### 6. Visual DNA
 
 Describe:
 
@@ -59,7 +77,7 @@ Describe:
 - Character or object continuity.
 - Graphic overlays, captions, lower thirds, UI, typography, and logo placement.
 
-### 6. Script Reconstruction
+### 7. Script Reconstruction
 
 Write a remake script with:
 
@@ -71,7 +89,7 @@ Write a remake script with:
 - Transition to the next beat.
 - Evidence frame references.
 
-### 7. AI Recreation Prompt Pack
+### 8. AI Recreation Prompt Pack
 
 Provide:
 
@@ -80,7 +98,7 @@ Provide:
 - Negative prompts for visual artifacts to avoid.
 - Continuity constraints for characters, products, logos, props, color, and location.
 
-### 8. Modification Plan
+### 9. Modification Plan
 
 Separate:
 
@@ -91,7 +109,7 @@ Separate:
 
 For each change, state which shots are affected and how to adjust prompts/scripts.
 
-### 9. Gaps and QA
+### 10. Gaps and QA
 
 List anything that blocks a faithful recreation:
 

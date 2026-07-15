@@ -138,6 +138,7 @@ async function main() {
   await mkdir(path.join(runDir, "metadata"), { recursive: true });
   await mkdir(path.join(runDir, "output"), { recursive: true });
   await mkdir(path.join(runDir, "output", "keyframes"), { recursive: true });
+  await mkdir(path.join(runDir, "output", "recreation-pack", "reference-keyframes"), { recursive: true });
 
   const frameIndex = [];
   const manifest = {
@@ -177,9 +178,12 @@ async function main() {
 
     if (copyKeyframes) {
       const deliveryDir = path.join(runDir, "output", "keyframes", videoSlug);
+      const recreationKeyframeDir = path.join(runDir, "output", "recreation-pack", "reference-keyframes", videoSlug);
       await mkdir(deliveryDir, { recursive: true });
+      await mkdir(recreationKeyframeDir, { recursive: true });
       for (const frame of frames) {
         await copyFile(path.join(runDir, frame.frame), path.join(runDir, frame.delivery_frame));
+        await copyFile(path.join(runDir, frame.frame), path.join(recreationKeyframeDir, frame.file));
       }
     }
 
@@ -209,6 +213,7 @@ async function main() {
   await writeFile(path.join(runDir, "output", "keyframes-index.md"), createKeyframeIndex(manifest, frameIndex, language), "utf8");
   await writeFile(path.join(runDir, "output", "delivery-manifest.json"), `${JSON.stringify(createDeliveryManifest(manifest, frameIndex), null, 2)}\n`);
   await writeFile(path.join(runDir, "output", "recreate-report.md"), createReportTemplate(manifest, language), "utf8");
+  await writeRecreationPack(runDir, manifest, frameIndex, language);
 
   console.log(JSON.stringify({
     run_directory: runDir,
@@ -218,6 +223,7 @@ async function main() {
       "output/recreate-report.md",
       "output/keyframes-index.md",
       "output/delivery-manifest.json",
+      "output/recreation-pack/",
       copyKeyframes ? "output/keyframes/" : "frames/"
     ]
   }, null, 2));
@@ -250,6 +256,8 @@ function createDeliveryManifest(manifest, frameIndex) {
       recreate_report: "output/recreate-report.md",
       keyframes_index: "output/keyframes-index.md",
       keyframes_directory: manifest.extraction.keyframes_copied_to_output ? "output/keyframes" : "frames",
+      recreation_pack_directory: "output/recreation-pack",
+      recreation_pack_manifest: "output/recreation-pack/recreation-manifest.json",
       frame_index_json: "metadata/frame-index.json",
       manifest_json: "metadata/manifest.json",
       ffprobe_metadata_pattern: "metadata/*.ffprobe.json"
@@ -270,6 +278,248 @@ function createKeyframeIndex(manifest, frameIndex, language) {
     ? "| 视频 | 序号 | 近似时间码 | 交付文件 | 画面观察 |\n| --- | ---: | --- | --- | --- |"
     : "| Video | Index | Approx. timecode | Delivery file | Visual notes |\n| --- | ---: | --- | --- | --- |";
   return `${title}\n\n${note}\n\n${headers}\n${rows}\n`;
+}
+
+async function writeRecreationPack(runDir, manifest, frameIndex, language) {
+  const packDir = path.join(runDir, "output", "recreation-pack");
+  const isZh = language === "zh";
+  const files = isZh
+    ? createChineseRecreationPackFiles(manifest, frameIndex)
+    : createEnglishRecreationPackFiles(manifest, frameIndex);
+  for (const [relativePath, content] of Object.entries(files)) {
+    await writeFile(path.join(packDir, relativePath), content, "utf8");
+  }
+  await writeFile(path.join(packDir, "recreation-manifest.json"), `${JSON.stringify(createRecreationManifest(manifest, frameIndex, language), null, 2)}\n`);
+}
+
+function createRecreationManifest(manifest, frameIndex, language) {
+  return {
+    schema_version: "ffmpeg_video_recreator.recreation_pack.v1",
+    created_at: new Date().toISOString(),
+    language,
+    purpose: "Portable package for recreating or modifying the source video with AI video tools.",
+    source: {
+      input_directory: manifest.input_directory,
+      run_directory: manifest.run_directory,
+      videos: manifest.videos
+    },
+    files: {
+      readme: "README.md",
+      recreation_brief: "recreation-brief.md",
+      shot_list: "shot-list.md",
+      prompts: "prompts.md",
+      modification_plan: "modification-plan.md",
+      reference_keyframes: "reference-keyframes/",
+      source_report: "../recreate-report.md",
+      source_keyframe_index: "../keyframes-index.md",
+      source_delivery_manifest: "../delivery-manifest.json"
+    },
+    frame_count: frameIndex.length,
+    reference_keyframes: frameIndex.map((frame) => ({
+      video: frame.video,
+      index: frame.index,
+      approx_timecode: frame.approx_timecode,
+      file: path.join("reference-keyframes", frame.video_slug, frame.file)
+    }))
+  };
+}
+
+function createEnglishRecreationPackFiles(manifest, frameIndex) {
+  const videoLines = manifest.videos.map((video) => `- ${video.file}: ${video.metadata.duration_seconds}s, ${video.metadata.width}x${video.metadata.height}, ${video.frame_count} reference frames`).join("\n");
+  const frameRows = frameIndex.map((frame) => `| ${frame.video} | ${frame.index} | ${frame.approx_timecode} | reference-keyframes/${frame.video_slug}/${frame.file} | TODO |`).join("\n");
+  return {
+    "README.md": `# Recreation Pack
+
+This folder is the portable recreation package. It is intentionally smaller and cleaner than the full analysis workspace.
+
+Use these files:
+
+- \`recreation-brief.md\`: concise remake brief for AI video tools or human creators.
+- \`shot-list.md\`: shot-by-shot reconstruction scaffold.
+- \`prompts.md\`: master and per-shot prompt scaffold.
+- \`modification-plan.md\`: preserve/change plan.
+- \`reference-keyframes/\`: frame images to use as visual references.
+- \`recreation-manifest.json\`: machine-readable package inventory.
+
+The full evidence set remains one level up in \`../keyframes/\`, \`../keyframes-index.md\`, and \`../recreate-report.md\`.
+`,
+    "recreation-brief.md": `# Recreation Brief
+
+## Source
+
+- Input directory: ${manifest.input_directory}
+- Run directory: ${manifest.run_directory}
+- Extraction mode: ${manifest.extraction.mode}
+- Report language: ${manifest.extraction.report_language}
+
+${videoLines}
+
+## Recreate Goal
+
+TODO: State the remake goal, target platform, duration, aspect ratio, and intended audience.
+
+## Preserve
+
+TODO: List the source video's must-preserve pacing, camera language, visual identity, subject continuity, and narrative beats.
+
+## Change
+
+TODO: List requested changes and where they apply.
+
+## Reference Frames
+
+Use \`reference-keyframes/\` as the visual input set for recreation.
+`,
+    "shot-list.md": `# Shot List
+
+| Shot | Timecode | Visual direction | Camera/framing | Action | Text/audio | Reference frames |
+| ---: | --- | --- | --- | --- | --- | --- |
+| 1 | TODO | TODO | TODO | TODO | TODO | TODO |
+
+## Frame Evidence
+
+| Video | Frame | Approx. timecode | File | Notes |
+| --- | ---: | --- | --- | --- |
+${frameRows}
+`,
+    "prompts.md": `# AI Video Prompts
+
+## Master Prompt
+
+TODO: Write one master prompt that preserves format, visual style, pacing, camera language, lighting, color, subject continuity, and narrative structure.
+
+## Per-Shot Prompts
+
+### Shot 1
+
+TODO: Include subject, scene, camera, action, lighting, style, duration, transition, and reference frame filenames.
+
+## Negative Prompt
+
+TODO: List artifacts to avoid, including inconsistent identity, extra limbs, incorrect text, logo drift, flicker, warped objects, and mismatched lighting.
+
+## Continuity Constraints
+
+TODO: List continuity constraints for characters, products, logos, props, color, wardrobe, location, and typography.
+`,
+    "modification-plan.md": `# Modification Plan
+
+## Must Preserve
+
+TODO: List elements that must stay close to the source.
+
+## Can Modify
+
+TODO: List safe creative changes.
+
+## Requested Changes
+
+TODO: Map each requested change to affected shots and prompt edits.
+
+## QA Checks
+
+TODO: Define how to check whether the recreation still matches the source structure.
+`
+  };
+}
+
+function createChineseRecreationPackFiles(manifest, frameIndex) {
+  const videoLines = manifest.videos.map((video) => `- ${video.file}: ${video.metadata.duration_seconds}s, ${video.metadata.width}x${video.metadata.height}, ${video.frame_count} 张参考帧`).join("\n");
+  const frameRows = frameIndex.map((frame) => `| ${frame.video} | ${frame.index} | ${frame.approx_timecode} | reference-keyframes/${frame.video_slug}/${frame.file} | TODO |`).join("\n");
+  return {
+    "README.md": `# 视频复刻独立包
+
+这个目录是可独立交给 AI 视频工具或创作者使用的复刻包。它比完整分析工作区更干净，只保留复刻所需的核心材料。
+
+使用这些文件：
+
+- \`recreation-brief.md\`：复刻任务简报。
+- \`shot-list.md\`：分镜/镜头清单。
+- \`prompts.md\`：master prompt 和逐镜头 prompt。
+- \`modification-plan.md\`：保留项、可修改项和用户修改要求。
+- \`reference-keyframes/\`：用于复刻参考的关键帧图片。
+- \`recreation-manifest.json\`：机器可读的复刻包清单。
+
+完整证据集仍在上一级目录：\`../keyframes/\`、\`../keyframes-index.md\` 和 \`../recreate-report.md\`。
+`,
+    "recreation-brief.md": `# 复刻任务简报
+
+## 来源
+
+- 输入目录：${manifest.input_directory}
+- 任务目录：${manifest.run_directory}
+- 抽帧模式：${manifest.extraction.mode}
+- 报告语言：${manifest.extraction.report_language}
+
+${videoLines}
+
+## 复刻目标
+
+TODO：写明复刻目标、目标平台、时长、画幅比例、受众和使用场景。
+
+## 必须保留
+
+TODO：列出必须保留的节奏、镜头语言、视觉识别、主体连续性和叙事节拍。
+
+## 需要修改
+
+TODO：列出用户要求修改的内容，以及影响哪些镜头。
+
+## 参考帧
+
+使用 \`reference-keyframes/\` 作为复刻视觉输入集。
+`,
+    "shot-list.md": `# 分镜/镜头清单
+
+| 镜头 | 时间码 | 画面指令 | 镜头/构图 | 动作 | 文字/音频 | 参考帧 |
+| ---: | --- | --- | --- | --- | --- | --- |
+| 1 | TODO | TODO | TODO | TODO | TODO | TODO |
+
+## 关键帧证据
+
+| 视频 | 帧序号 | 近似时间码 | 文件 | 备注 |
+| --- | ---: | --- | --- | --- |
+${frameRows}
+`,
+    "prompts.md": `# AI 视频生成 Prompt
+
+## Master Prompt
+
+TODO：写一个总 prompt，保留原视频的格式、视觉风格、节奏、镜头语言、光线、色彩、主体连续性和叙事结构。
+
+## 逐镜头 Prompt
+
+### 镜头 1
+
+TODO：包含主体、场景、镜头、动作、光线、风格、时长、转场和参考帧文件名。
+
+## Negative Prompt
+
+TODO：列出需要避免的问题，例如身份不一致、多余肢体、错误文字、Logo 漂移、闪烁、物体变形、光线不匹配。
+
+## 连续性约束
+
+TODO：列出人物、产品、Logo、道具、色彩、服装、地点、字体和字幕的连续性要求。
+`,
+    "modification-plan.md": `# 修改方案
+
+## 必须保留
+
+TODO：列出必须贴近原视频的元素。
+
+## 可以修改
+
+TODO：列出安全的创意修改空间。
+
+## 用户指定修改
+
+TODO：把每项修改映射到受影响镜头和 prompt 改写方式。
+
+## QA 检查
+
+TODO：定义如何检查复刻结果仍然匹配原视频结构。
+`
+  };
 }
 
 function createReportTemplate(manifest, language) {

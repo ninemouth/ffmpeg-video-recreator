@@ -32,6 +32,8 @@ node scripts/extract-keyframes.mjs --input "/path/to/video-folder" --run "work/r
 
 5. Deliver the complete `output/` package, not only a contact sheet or report.
 
+6. For handoff to another AI video tool, use `output/recreation-pack/` as the portable recreation package.
+
 ## Workspace Contract
 
 Each task must stay inside one run directory:
@@ -43,6 +45,7 @@ work/runs/<timestamp-slug>/
 ├── metadata/           # ffprobe, manifest, command log, frame index
 ├── output/             # final delivery package
 │   ├── keyframes/      # copied keyframes for delivery
+│   ├── recreation-pack/# portable pack for AI recreation handoff
 │   ├── keyframes-index.md
 │   ├── delivery-manifest.json
 │   └── recreate-report.md
@@ -75,6 +78,17 @@ The final user-facing delivery is the whole `output/` directory:
 - `output/keyframes/`: extracted keyframes grouped by source video.
 - `output/keyframes-index.md`: human-readable keyframe index with visual-note placeholders.
 - `output/delivery-manifest.json`: machine-readable list of report, keyframes, metadata, and source video summaries.
+- `output/recreation-pack/`: independent package for handing to AI video tools or creative operators.
+
+The recreation pack contains:
+
+- `README.md`: how to use the pack.
+- `recreation-brief.md`: compact remake brief.
+- `shot-list.md`: shot-by-shot scaffold with reference-frame links.
+- `prompts.md`: master prompt, per-shot prompt, negative prompt, and continuity constraints.
+- `modification-plan.md`: preserve/change plan.
+- `reference-keyframes/`: copied keyframes for recreation input.
+- `recreation-manifest.json`: machine-readable pack inventory.
 
 If a contact sheet is also generated, treat it as a navigation aid. It does not replace the individual keyframe files.
 
@@ -94,6 +108,7 @@ The report must include:
 
 - Source inventory and technical metadata.
 - Delivered keyframes and an index that links frame files to observations.
+- Independent recreation pack with brief, shot list, prompts, modification plan, and reference keyframes.
 - Frame-by-frame visual observations.
 - Shot sequence with timestamps, camera movement, composition, lighting, subject/action, and text overlays.
 - Narrative/script reconstruction including voiceover, dialogue, captions, on-screen text, beats, and transitions.
