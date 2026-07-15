@@ -159,10 +159,19 @@ node scripts/extract-keyframes.mjs \
 如需单独运行：
 
 ```bash
+node scripts/install-audio-support.mjs --profile signal
 node scripts/analyze-audio.mjs --input "/path/to/video-folder" --run "work/runs/<run-id>" --language zh
 node scripts/transcribe-audio.mjs --run "work/runs/<run-id>" --provider auto --model auto --quality balanced --language zh
 node scripts/classify-audio-events.mjs --run "work/runs/<run-id>" --provider auto --language zh
 ```
+
+`install-audio-support.mjs` 会在 skill 目录创建 `.venv-audio/`，默认安装非 AI 音频增强依赖：`numpy`、`scipy`、`soundfile`、`librosa`。脚本会自动优先使用这个 venv，不污染系统 Python。可选 profile：
+
+- `--profile signal`：安装 librosa 等节奏/频谱分析依赖，推荐默认安装。
+- `--profile asr-faster-whisper`：安装本地 faster-whisper ASR，适合 NVIDIA CUDA 或愿意 CPU int8 跑 ASR 的机器。
+- `--profile asr-openai-whisper`：安装 OpenAI Whisper Python 本地包。
+- `--profile events`：安装 TensorFlow / TensorFlow Hub，给后续 YAMNet 类本地声音事件模型准备环境。
+- `--profile all`：安装以上全部，体积较大，不建议默认使用。
 
 本地 ASR 自动选择策略：
 
@@ -395,10 +404,19 @@ This command runs three audio layers by default:
 Run the layers manually:
 
 ```bash
+node scripts/install-audio-support.mjs --profile signal
 node scripts/analyze-audio.mjs --input "/path/to/video-folder" --run "work/runs/<run-id>" --language en
 node scripts/transcribe-audio.mjs --run "work/runs/<run-id>" --provider auto --model auto --quality balanced --language en
 node scripts/classify-audio-events.mjs --run "work/runs/<run-id>" --provider auto --language en
 ```
+
+`install-audio-support.mjs` creates `.venv-audio/` inside the skill and installs local optional support packages there. The default `signal` profile installs `numpy`, `scipy`, `soundfile`, and `librosa` for non-AI rhythm/spectrum analysis without polluting system Python. Optional profiles:
+
+- `--profile signal`: librosa-based rhythm/spectrum analysis; recommended default.
+- `--profile asr-faster-whisper`: local faster-whisper ASR for NVIDIA CUDA or CPU int8 users.
+- `--profile asr-openai-whisper`: local OpenAI Whisper Python package.
+- `--profile events`: TensorFlow / TensorFlow Hub for future local YAMNet-style event classification.
+- `--profile all`: all optional packages; large, not recommended as the default.
 
 Local ASR auto-selection:
 

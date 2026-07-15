@@ -19,6 +19,7 @@
     "ffmpeg:install": "node scripts/install-ffmpeg.mjs --install",
     "extract:keyframes": "node scripts/extract-keyframes.mjs",
     "audio:analyze": "node scripts/analyze-audio.mjs",
+    "audio:install": "node scripts/install-audio-support.mjs",
     "audio:transcribe": "node scripts/transcribe-audio.mjs",
     "audio:events": "node scripts/classify-audio-events.mjs",
     "check:update": "node scripts/check-skill-update.mjs",

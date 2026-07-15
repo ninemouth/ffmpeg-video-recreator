@@ -7,8 +7,11 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { spawn, spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 
 const VIDEO_EXTENSIONS = new Set([".mp4", ".mov", ".m4v", ".avi", ".mkv", ".webm", ".wmv", ".flv"]);
+const scriptDir = path.dirname(fileURLToPath(import.meta.url));
+const skillRoot = path.resolve(scriptDir, "..");
 
 function parseArgs(argv) {
   const args = {};
@@ -206,7 +209,7 @@ async function runEbur128(audioPath) {
 }
 
 async function runLibrosaOptional(audioPath) {
-  const python = ["python3", "python"].find(commandExists);
+  const python = pythonCommand();
   if (!python) return skipped("python_not_found");
   const probe = spawnSync(python, ["-c", "import librosa, json"], { encoding: "utf8" });
   if (probe.status !== 0) return skipped("librosa_not_installed");
@@ -234,6 +237,17 @@ print(json.dumps({
   const result = spawnSync(python, ["-c", code, audioPath], { encoding: "utf8", maxBuffer: 1024 * 1024 * 20 });
   if (result.status !== 0) return skipped("librosa_failed", result.stderr.trim());
   return JSON.parse(result.stdout);
+}
+
+function pythonCommand() {
+  if (process.env.FFMPEG_SKILL_AUDIO_PYTHON && existsSync(process.env.FFMPEG_SKILL_AUDIO_PYTHON)) {
+    return process.env.FFMPEG_SKILL_AUDIO_PYTHON;
+  }
+  const local = process.platform === "win32"
+    ? path.join(skillRoot, ".venv-audio", "Scripts", "python.exe")
+    : path.join(skillRoot, ".venv-audio", "bin", "python");
+  if (existsSync(local)) return local;
+  return ["python3", "python"].find(commandExists) || null;
 }
 
 function numberAfter(text, regex) {

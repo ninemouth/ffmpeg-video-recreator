@@ -36,6 +36,14 @@ This command runs three audio layers by default:
 
 No API provider is used by default. OCR, when used by the agent outside these scripts, is only a fallback for visible on-screen text and must not be described as speech recognition.
 
+If optional local Python support is missing, install it into the skill-owned venv instead of the system Python:
+
+```bash
+node scripts/install-audio-support.mjs --profile signal
+```
+
+Use `--profile asr-faster-whisper` only when the machine should run local faster-whisper ASR. Use `--profile events` only when local TensorFlow/YAMNet-style event classification is desired. The scripts auto-detect `.venv-audio`; a custom venv can be provided through `FFMPEG_SKILL_AUDIO_PYTHON`.
+
 4. Read `references/report-contract.md`, inspect the extracted frames and audio metadata, then fill the generated `output/recreate-report.md`.
 
 5. Deliver the complete `output/` package, not only a contact sheet or report.
@@ -163,6 +171,8 @@ Local ASR provider selection is hardware-aware:
 - API providers are disabled by default.
 
 OCR remains a visible-text-only fallback. It can read captions, overlays, titles, product text, and UI text in frames. It must not be used to infer speech when ASR is unavailable.
+
+Optional support libraries are installed by `scripts/install-audio-support.mjs` into `.venv-audio/`, which is excluded from git and skill sync backups. Do not install these packages into system Python unless the user explicitly asks.
 
 ## References
 

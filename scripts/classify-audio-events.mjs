@@ -7,6 +7,10 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+
+const scriptDir = path.dirname(fileURLToPath(import.meta.url));
+const skillRoot = path.resolve(scriptDir, "..");
 
 function parseArgs(argv) {
   const args = {};
@@ -31,6 +35,13 @@ function commandExists(command) {
 }
 
 function pythonCommand() {
+  if (process.env.FFMPEG_SKILL_AUDIO_PYTHON && existsSync(process.env.FFMPEG_SKILL_AUDIO_PYTHON)) {
+    return process.env.FFMPEG_SKILL_AUDIO_PYTHON;
+  }
+  const local = process.platform === "win32"
+    ? path.join(skillRoot, ".venv-audio", "Scripts", "python.exe")
+    : path.join(skillRoot, ".venv-audio", "bin", "python");
+  if (existsSync(local)) return local;
   return ["python3", "python"].find(commandExists) || null;
 }
 
