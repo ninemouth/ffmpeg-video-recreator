@@ -7,15 +7,21 @@ Match the report language to the user's interaction language. If the user asks i
 The final delivery is the complete `output/` directory, not only a contact sheet or report:
 
 - `output/recreate-report.md`
+- `output/README.md`
 - `output/keyframes/`
 - `output/keyframes-index.md`
 - `output/delivery-manifest.json`
+- `output/report-contract-check.json`
 - `output/recreation-pack/`
 - `output/audio-analysis.md`
 - `output/speech-transcript.md`
 - `output/audio-events.md`
 
 Use `output/recreation-pack/` as the portable handoff package for AI video tools or creative operators. It should stand on its own even if the receiver does not inspect the whole run directory.
+
+The direct-access contract is part of the delivery. The run must include `output/README.md`, and `output/delivery-manifest.json` must include a `direct_access` array with the same entries in final-response order. The completion reply must expose those entries directly rather than only naming selected highlights.
+
+Before final delivery, run `node scripts/validate-report-contract.mjs --run <run-dir>`. Do not report completion until it writes `output/report-contract-check.json` with `status: "passed"`.
 
 ## Required Sections
 
@@ -30,6 +36,8 @@ Use `output/recreation-pack/` as the portable handoff package for AI video tools
 - Output keyframe directory.
 - Keyframe index path.
 - Recreation pack path.
+- Delivery direct-access index path: `output/README.md`.
+- Delivery manifest `direct_access` status.
 
 ### 2. Keyframe Deliverables
 
@@ -159,6 +167,7 @@ Use these files when present:
 - `metadata/speech-transcript.json`: local ASR provider selection, hardware evidence, model, status, and transcript segments.
 - `metadata/audio-events.json`: local sound-event provider selection and skipped/completed status.
 - `output/audio-analysis.md`, `output/speech-transcript.md`, `output/audio-events.md`: human-readable summaries.
+- `output/report-contract-check.json`: final report contract validation status.
 
 Keep speech, visible text, and non-speech sound separate:
 

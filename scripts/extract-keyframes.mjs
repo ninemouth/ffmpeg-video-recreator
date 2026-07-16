@@ -227,38 +227,19 @@ async function main() {
   await writeFile(manifestPath, `${JSON.stringify({ ...existing, ...manifest, status: "keyframes_extracted", updated_at: new Date().toISOString() }, null, 2)}\n`);
   await writeFile(path.join(runDir, "metadata", "frame-index.json"), `${JSON.stringify(frameIndex, null, 2)}\n`);
   await writeFile(path.join(runDir, "output", "keyframes-index.md"), createKeyframeIndex(manifest, frameIndex, language), "utf8");
-  await writeFile(path.join(runDir, "output", "delivery-manifest.json"), `${JSON.stringify(createDeliveryManifest(manifest, frameIndex), null, 2)}\n`);
   await writeFile(path.join(runDir, "output", "recreate-report.md"), createReportTemplate(manifest, language), "utf8");
   await writeRecreationPack(runDir, manifest, frameIndex, language, segmentFrames);
   const audioOutputs = analyzeAudio ? await runAudioPipeline(input, runDir, language, audioAi) : [];
-  if (audioOutputs.length) {
-    const deliveryManifest = createDeliveryManifest(manifest, frameIndex);
-    deliveryManifest.deliverables.audio = {
-      audio_streams: "metadata/audio-streams.json",
-      audio_analysis: "metadata/audio-analysis.json",
-      audio_analysis_report: "output/audio-analysis.md",
-      speech_transcript: "metadata/speech-transcript.json",
-      speech_transcript_report: "output/speech-transcript.md",
-      audio_events: "metadata/audio-events.json",
-      audio_events_report: "output/audio-events.md"
-    };
-    await writeFile(path.join(runDir, "output", "delivery-manifest.json"), `${JSON.stringify(deliveryManifest, null, 2)}\n`);
-  }
+  const deliveryManifest = createDeliveryManifest(manifest, frameIndex, { audioOutputs });
+  await writeFile(path.join(runDir, "output", "delivery-manifest.json"), `${JSON.stringify(deliveryManifest, null, 2)}\n`);
+  await writeFile(path.join(runDir, "output", "README.md"), createDeliveryIndex(manifest, deliveryManifest, language), "utf8");
 
   console.log(JSON.stringify({
     run_directory: runDir,
     videos: manifest.videos.length,
     frames: frameIndex.length,
-    output_deliverables: [
-      "output/recreate-report.md",
-      "output/keyframes-index.md",
-      "output/delivery-manifest.json",
-      "output/recreation-pack/",
-      "output/recreation-pack/segment-plan.md",
-      "output/recreation-pack/continuity-locks.md",
-      ...audioOutputs,
-      copyKeyframes ? "output/keyframes/" : "frames/"
-    ]
+    direct_access: deliveryManifest.direct_access.map((item) => item.path),
+    output_deliverables: deliveryManifest.direct_access.map((item) => item.path)
   }, null, 2));
 }
 
@@ -314,29 +295,122 @@ function approximateTimecode(index, mode, interval) {
   return `${hh}:${mm}:${ss}`;
 }
 
-function createDeliveryManifest(manifest, frameIndex) {
+function createDeliveryManifest(manifest, frameIndex, options = {}) {
+  const audioOutputs = options.audioOutputs || [];
+  const includeAudio = audioOutputs.length > 0;
+  const deliverables = {
+    delivery_index: "output/README.md",
+    recreate_report: "output/recreate-report.md",
+    keyframes_index: "output/keyframes-index.md",
+    keyframes_directory: manifest.extraction.keyframes_copied_to_output ? "output/keyframes" : "frames",
+    recreation_pack_directory: "output/recreation-pack",
+    recreation_pack_manifest: "output/recreation-pack/recreation-manifest.json",
+    segment_plan: "output/recreation-pack/segment-plan.md",
+    continuity_locks: "output/recreation-pack/continuity-locks.md",
+    segment_anchors_directory: "output/recreation-pack/segments",
+    report_contract_check: "output/report-contract-check.json",
+    frame_index_json: "metadata/frame-index.json",
+    manifest_json: "metadata/manifest.json",
+    ffprobe_metadata_pattern: "metadata/*.ffprobe.json"
+  };
+  if (includeAudio) {
+    deliverables.audio = {
+      audio_streams: "metadata/audio-streams.json",
+      audio_analysis: "metadata/audio-analysis.json",
+      audio_analysis_report: "output/audio-analysis.md",
+      speech_transcript: "metadata/speech-transcript.json",
+      speech_transcript_report: "output/speech-transcript.md",
+      audio_events: "metadata/audio-events.json",
+      audio_events_report: "output/audio-events.md"
+    };
+  }
   return {
     schema_version: "ffmpeg_video_recreator.delivery.v1",
     created_at: new Date().toISOString(),
     run_directory: manifest.run_directory,
     input_directory: manifest.input_directory,
     report_language: manifest.extraction.report_language,
-    deliverables: {
-      recreate_report: "output/recreate-report.md",
-      keyframes_index: "output/keyframes-index.md",
-      keyframes_directory: manifest.extraction.keyframes_copied_to_output ? "output/keyframes" : "frames",
-      recreation_pack_directory: "output/recreation-pack",
-      recreation_pack_manifest: "output/recreation-pack/recreation-manifest.json",
-      segment_plan: "output/recreation-pack/segment-plan.md",
-      continuity_locks: "output/recreation-pack/continuity-locks.md",
-      segment_anchors_directory: "output/recreation-pack/segments",
-      frame_index_json: "metadata/frame-index.json",
-      manifest_json: "metadata/manifest.json",
-      ffprobe_metadata_pattern: "metadata/*.ffprobe.json"
+    direct_access_contract: {
+      rule: "Final user replies must expose this direct_access list in this order instead of only naming selected highlights.",
+      index_file: "output/README.md",
+      complete_package_directory: "output/"
     },
+    direct_access: createDirectAccessItems(manifest, { includeAudio }),
+    deliverables,
     videos: manifest.videos,
     frame_count: frameIndex.length
   };
+}
+
+function createDirectAccessItems(manifest, options = {}) {
+  const keyframesPath = manifest.extraction.keyframes_copied_to_output ? "output/keyframes/" : "frames/";
+  const items = [
+    directAccessItem("complete_delivery_package", "完整交付目录", "Complete Delivery Directory", "output/", "directory", true),
+    directAccessItem("delivery_index", "交付入口索引", "Delivery Index", "output/README.md", "file", true),
+    directAccessItem("recreate_report", "复刻报告", "Recreate Report", "output/recreate-report.md", "file", true),
+    directAccessItem("ai_recreation_pack", "AI 视频复刻交接包", "AI Video Recreation Pack", "output/recreation-pack/", "directory", true),
+    directAccessItem("segment_plan", "分段连续性方案", "Segment Continuity Plan", "output/recreation-pack/segment-plan.md", "file", true),
+    directAccessItem("continuity_locks", "连续性锁定规则", "Continuity Locks", "output/recreation-pack/continuity-locks.md", "file", true),
+    directAccessItem("keyframes", "完整关键帧目录", "Complete Keyframes Directory", keyframesPath, "directory", true),
+    directAccessItem("keyframes_index", "关键帧索引", "Keyframe Index", "output/keyframes-index.md", "file", true),
+    directAccessItem("delivery_manifest", "机器可读交付清单", "Machine-Readable Delivery Manifest", "output/delivery-manifest.json", "file", true),
+    directAccessItem("report_contract_check", "报告契约校验结果", "Report Contract Check", "output/report-contract-check.json", "file", true)
+  ];
+  if (options.includeAudio) {
+    items.push(
+      directAccessItem("audio_analysis", "音频分析摘要", "Audio Analysis Summary", "output/audio-analysis.md", "file", true),
+      directAccessItem("speech_transcript", "语音转写摘要", "Speech Transcript Summary", "output/speech-transcript.md", "file", true),
+      directAccessItem("audio_events", "音频事件状态", "Audio Event Status", "output/audio-events.md", "file", true)
+    );
+  }
+  return items;
+}
+
+function directAccessItem(id, labelZh, labelEn, itemPath, type, required) {
+  return {
+    id,
+    label: {
+      zh: labelZh,
+      en: labelEn
+    },
+    path: itemPath,
+    type,
+    required
+  };
+}
+
+function createDeliveryIndex(manifest, deliveryManifest, language) {
+  const isZh = language === "zh";
+  const title = isZh ? "# 交付入口索引" : "# Delivery Index";
+  const intro = isZh
+    ? "最终回复应按下列顺序提供这些直接入口，避免只列重点文件导致客户误以为交付项缺失。"
+    : "Final replies should expose these direct-access entries in this order so recipients do not mistake a highlight list for the full delivery.";
+  const rows = deliveryManifest.direct_access
+    .map((item) => `| ${item.label[isZh ? "zh" : "en"]} | ${item.path} | ${item.type} |`)
+    .join("\n");
+  const headers = isZh
+    ? "| 入口 | 路径 | 类型 |\n| --- | --- | --- |"
+    : "| Entry | Path | Type |\n| --- | --- | --- |";
+  const videoRows = manifest.videos
+    .map((video) => `| ${video.file} | ${video.metadata.duration_seconds}s | ${video.metadata.width}x${video.metadata.height} | ${video.frame_count} | ${video.metadata.has_audio ? "yes" : "no"} |`)
+    .join("\n");
+  const videoHeaders = isZh
+    ? "| 视频 | 时长 | 分辨率 | 关键帧 | 音频 |\n| --- | ---: | --- | ---: | --- |"
+    : "| Video | Duration | Resolution | Keyframes | Audio |\n| --- | ---: | --- | ---: | --- |";
+  return `${title}
+
+${intro}
+
+${headers}
+${rows}
+
+## ${isZh ? "源视频概览" : "Source Overview"}
+
+${videoHeaders}
+${videoRows}
+
+${isZh ? "说明：`output/` 是完整交付目录；`output/recreation-pack/` 是可独立交给 AI 视频工具或创作者的复刻交接包。" : "Note: `output/` is the complete delivery directory; `output/recreation-pack/` is the portable package for AI video tools or creative operators."}
+`;
 }
 
 function createKeyframeIndex(manifest, frameIndex, language) {
@@ -792,38 +866,54 @@ function createReportTemplate(manifest, language) {
 - Scene threshold: ${manifest.extraction.scene_threshold}
 - Report language: ${manifest.extraction.report_language === "auto" ? "Match the user's interaction language" : manifest.extraction.report_language}
 - Keyframe delivery directory: output/keyframes/
+- Keyframe index: output/keyframes-index.md
+- Delivery index: output/README.md
+- Delivery manifest: output/delivery-manifest.json
+- Recreation pack: output/recreation-pack/
 
 ${videoLines}
 
-## 2. Executive Summary
+## 2. Keyframe Deliverables
 
-TODO: Inspect the extracted frames and summarize the source video.
+TODO: List extracted keyframes as formal evidence assets with file paths, timecodes, visual observations, and recreation value. Use output/keyframes-index.md and output/keyframes/.
 
-## 3. Timeline Reconstruction
+## 3. Recreation Pack
+
+TODO: Confirm output/recreation-pack/ exists and list README.md, recreation-brief.md, shot-list.md, segment-plan.md, prompts.md, continuity-locks.md, modification-plan.md, reference-keyframes/, segments/, and recreation-manifest.json.
+
+## 4. Segment Continuity Plan
+
+TODO: Summarize output/recreation-pack/segment-plan.md and output/recreation-pack/continuity-locks.md. Explain previous-segment-end-frame anchors and boundary QA.
+
+## 5. Executive Summary
+
+TODO: Inspect the extracted frames and summarize the source video, target audience, purpose, and must-preserve elements.
+
+## 6. Timeline Reconstruction
 
 | Timecode | Visual content | Camera/framing | Motion/editing | Text/audio | Recreate notes |
 | --- | --- | --- | --- | --- | --- |
 | TODO | TODO | TODO | TODO | TODO | TODO |
 
-## 4. Visual DNA
+## 7. Visual DNA
 
 TODO: Describe composition, lens/framing, motion, lighting, color, styling, overlays, typography, and continuity.
 
-## 5. Script Reconstruction
+## 8. Script Reconstruction
 
 TODO: Write scene-by-scene visual direction, action, voiceover/dialogue/captions, and transitions.
 
-## 6. AI Recreation Prompt Pack
+## 9. AI Recreation Prompt Pack
 
 TODO: Provide master prompt, per-shot prompts, negative prompts, and continuity constraints.
 
-## 7. Modification Plan
+## 10. Modification Plan
 
 TODO: Separate must-preserve elements, editable elements, requested changes, and creative alternatives.
 
-## 8. Gaps and QA
+## 11. Gaps and QA
 
-TODO: Note missing audio analysis, sparse frames, unreadable text, blur, fast motion, or legal/brand constraints.
+TODO: Note missing audio analysis, ASR skipped status, sound-event skipped status, sparse frames, unreadable text, blur, fast motion, or legal/brand constraints. End with exact supporting files including metadata/manifest.json, metadata/frame-index.json, output/keyframes-index.md, output/keyframes/, output/recreation-pack/, output/delivery-manifest.json, and output/report-contract-check.json.
 `;
 }
 
@@ -841,43 +931,53 @@ function createChineseReportTemplate(manifest) {
 - 报告语言：中文
 - 关键帧交付目录：output/keyframes/
 - 关键帧索引：output/keyframes-index.md
+- 交付入口索引：output/README.md
 - 交付清单：output/delivery-manifest.json
+- 复刻交接包：output/recreation-pack/
 
 ${videoLines}
 
-## 2. 视频整体总结
+## 2. 关键帧交付物
+
+TODO：把抽取的关键帧作为正式证据资产列出，包含文件路径、近似时间码、画面观察和复刻价值。依据 output/keyframes-index.md 和 output/keyframes/。
+
+## 3. 复刻交接包
+
+TODO：确认 output/recreation-pack/ 已生成并可独立使用，列出 README.md、recreation-brief.md、shot-list.md、segment-plan.md、prompts.md、continuity-locks.md、modification-plan.md、reference-keyframes/、segments/ 和 recreation-manifest.json。
+
+## 4. 分段连续性方案
+
+TODO：总结 output/recreation-pack/segment-plan.md 和 output/recreation-pack/continuity-locks.md，说明上一段结束帧锚点和边界 QA。
+
+## 5. 视频整体总结
 
 TODO：查看关键帧和 metadata 后，用中文总结视频内容、目标受众、商业/创作用途，以及复刻时最需要保留的元素。
 
-## 3. 关键帧证据清单
-
-TODO：引用 output/keyframes-index.md 中的关键帧，说明每组关键帧对应的镜头、动作、构图、字幕、产品或人物变化。
-
-## 4. 时间线与镜头拆解
+## 6. 时间线与镜头拆解
 
 | 时间码 | 画面内容 | 镜头/构图 | 运动/剪辑 | 文字/音频 | 复刻要点 | 证据帧 |
 | --- | --- | --- | --- | --- | --- | --- |
 | TODO | TODO | TODO | TODO | TODO | TODO | TODO |
 
-## 5. 视觉 DNA
+## 7. 视觉 DNA
 
 TODO：描述构图规律、镜头语言、运动方式、光线、色彩、场景/产品陈列、人物或物体连续性、字幕/图形/Logo/排版风格。
 
-## 6. 剧本与分镜脚本复原
+## 8. 剧本与分镜脚本复原
 
 TODO：按场景编号写出时间范围、画面指令、动作、旁白/对白/字幕、转场方式。无法确认的内容标注为「无法确认」或「画面不可读」。
 
-## 7. AI 视频复刻 Prompt 包
+## 9. AI 视频复刻提示词包
 
 TODO：提供 master prompt、逐镜头 prompt、negative prompt，以及人物/产品/Logo/道具/色彩/场景连续性约束。
 
-## 8. 修改方案
+## 10. 修改计划
 
 TODO：分开列出必须保留、可以修改、用户要求修改、可替代创意。每项修改都说明影响哪些镜头以及如何调整 prompt/脚本。
 
-## 9. 缺口与 QA 风险
+## 11. 缺口与 QA
 
-TODO：记录缺失音频转写、关键帧不足、画面模糊、文字不可读、快速运动未捕捉、品牌/肖像/版权风险等问题。
+TODO：记录缺失音频分析、ASR skipped 状态、声音事件 skipped 状态、关键帧不足、画面模糊、文字不可读、快速运动未捕捉、品牌/肖像/版权风险等问题。结尾列出精确支撑文件，包括 metadata/manifest.json、metadata/frame-index.json、output/keyframes-index.md、output/keyframes/、output/recreation-pack/、output/delivery-manifest.json 和 output/report-contract-check.json。
 `;
 }
 

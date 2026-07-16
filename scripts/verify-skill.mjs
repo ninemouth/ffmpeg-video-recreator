@@ -22,6 +22,7 @@ const required = [
   "scripts/analyze-audio.mjs",
   "scripts/transcribe-audio.mjs",
   "scripts/classify-audio-events.mjs",
+  "scripts/validate-report-contract.mjs",
   "scripts/check-skill-update.mjs",
   "scripts/install-or-update-from-github.mjs",
   "scripts/sync-to-codex-skill.mjs",
@@ -44,9 +45,12 @@ if (skill.includes("TODO: Complete") || skill.includes("[TODO")) {
 if (!skill.includes("scripts/extract-keyframes.mjs") || !skill.includes("references/report-contract.md")) {
   throw new Error("SKILL.md does not route to required scripts and references.");
 }
+if (!skill.includes("direct_access") || !skill.includes("output/README.md")) {
+  throw new Error("SKILL.md must require the stable direct-access delivery index.");
+}
 
 const pkg = JSON.parse(await readFile(path.join(root, "package.json"), "utf8"));
-for (const script of ["verify", "ffmpeg:check", "ffmpeg:install", "extract:keyframes", "audio:install", "audio:analyze", "audio:transcribe", "audio:events", "audio:self-check", "check:update", "install:github", "update:github", "sync:codex"]) {
+for (const script of ["verify", "ffmpeg:check", "ffmpeg:install", "extract:keyframes", "audio:install", "audio:analyze", "audio:transcribe", "audio:events", "audio:self-check", "report:validate", "check:update", "install:github", "update:github", "sync:codex"]) {
   if (!pkg.scripts?.[script]) throw new Error(`package.json missing script: ${script}`);
 }
 if (pkg.license !== "MIT") {
@@ -75,6 +79,32 @@ for (const file of required.filter((entry) => entry.startsWith("scripts/"))) {
   const source = await readFile(path.join(root, file), "utf8");
   if (!source.includes(copyrightNotice) || !source.includes(spdxNotice)) {
     throw new Error(`${file} is missing the required source license header.`);
+  }
+}
+
+const extractSource = await readFile(path.join(root, "scripts/extract-keyframes.mjs"), "utf8");
+for (const expected of [
+  "createDirectAccessItems",
+  "createDeliveryIndex",
+  "direct_access",
+  "output/README.md",
+  "Final user replies must expose this direct_access list"
+]) {
+  if (!extractSource.includes(expected)) {
+    throw new Error(`extract-keyframes.mjs is missing direct-access contract text: ${expected}`);
+  }
+}
+
+const reportValidatorSource = await readFile(path.join(root, "scripts/validate-report-contract.mjs"), "utf8");
+for (const expected of [
+  "ffmpeg_video_recreator.report_contract_check.v1",
+  "requiredSections",
+  "direct_access",
+  "report-contract-check.json",
+  "no_todo_placeholders"
+]) {
+  if (!reportValidatorSource.includes(expected)) {
+    throw new Error(`validate-report-contract.mjs is missing required contract check text: ${expected}`);
   }
 }
 

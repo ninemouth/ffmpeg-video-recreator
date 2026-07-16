@@ -91,14 +91,23 @@ By default, extracted keyframes are copied into `output/keyframes/` as formal de
 
 The final user-facing delivery is the whole `output/` directory:
 
+- `output/README.md`: direct-access delivery index for the final reply.
 - `output/recreate-report.md`: language-matched recreate report.
 - `output/keyframes/`: extracted keyframes grouped by source video.
 - `output/keyframes-index.md`: human-readable keyframe index with visual-note placeholders.
 - `output/delivery-manifest.json`: machine-readable list of report, keyframes, metadata, and source video summaries.
+- `output/report-contract-check.json`: proof that the final report passed the contract gate.
 - `output/recreation-pack/`: independent package for handing to AI video tools or creative operators.
 - `output/audio-analysis.md`: non-AI audio signal summary when source audio exists.
 - `output/speech-transcript.md`: local ASR transcript or a clear skipped status.
 - `output/audio-events.md`: local sound-event AI status or a clear skipped status.
+
+Every run must also expose a stable direct-access index:
+
+- `output/README.md`: user-facing delivery entry index.
+- `output/delivery-manifest.json` field `direct_access`: machine-readable list of the same direct entries, in final-response order.
+
+When reporting completion to the user, list the `direct_access` entries in order. Do not replace the full direct-access list with only "important files"; highlights may be added after the full list.
 
 The recreation pack contains:
 
@@ -135,7 +144,9 @@ The scripts generate a report scaffold, not a finished creative judgment. After 
 2. Inspect representative frames from each video.
 3. Open `output/keyframes-index.md` and add concise visual notes for the most important frames.
 4. Write `output/recreate-report.md` using `references/report-contract.md`.
-5. Include enough detail for another AI to recreate the video while allowing intentional changes.
+5. Run `node scripts/validate-report-contract.mjs --run "work/runs/<run-id>"`.
+6. Fix every failed check before reporting completion.
+7. Include enough detail for another AI to recreate the video while allowing intentional changes.
 
 Use the user's interaction language for the final report and keyframe notes. If the user speaks Chinese, the report, section labels, summaries, shot table, script, and prompts should be Chinese unless the user asks otherwise.
 
@@ -154,6 +165,7 @@ The report must include:
 - Risk notes for missing audio, unreadable text, blurry frames, or under-sampled scenes.
 - Audio evidence from `metadata/audio-streams.json`, `metadata/audio-analysis.json`, `metadata/speech-transcript.json`, and `metadata/audio-events.json`.
 - OCR notes only for visible on-screen text. Do not use OCR as a substitute for speech ASR.
+- Contract proof from `output/report-contract-check.json` with `status: "passed"`.
 
 ## Audio and OCR Policy
 
