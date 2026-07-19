@@ -9,7 +9,7 @@ description: Install or locate FFmpeg on macOS or Windows, create isolated per-t
 
 If the skill is not installed or the user asks to install/update from GitHub, follow `references/github-install-update.md` first. Prefer the bundled installer/update script after cloning the repo.
 
-GitHub install/update of this skill also installs or updates the companion `$video-frame-image-asset-generator` skill. That companion turns extracted video frames into clean scene plates, UI-free reconstructions, plain-background multi-angle character references, prop/wardrobe cutouts, prompt packs, request packs, and generated image assets. During install/update, if third-party image provider base URL or API key is not supplied, the installer should prompt for them when the terminal is interactive; native Codex image generation remains available when no third-party key is configured.
+GitHub install/update of this skill also installs or updates the companion `$video-frame-image-asset-generator` skill. That companion turns extracted video frames into clean scene plates, UI-free reconstructions, plain-background multi-angle character references, prop/wardrobe cutouts, prompt packs, request packs, and generated image assets. User-facing install/update should be natural-language first: the user should only need to ask Codex to install or update the FFmpeg skill and configure image generation. Do not require users to pass CLI flags for provider setup. During install/update, if third-party image provider base URL or API key is not already configured, the installer prompts for them when the terminal is interactive; native Codex image generation remains available when no third-party key is configured.
 
 1. Create a separate run workspace for every task:
 

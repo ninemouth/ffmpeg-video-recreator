@@ -43,19 +43,26 @@ AI 默认不直接读取原视频。AI 读取的是 FFmpeg 生成的关键帧、
 
 ### 在 Codex 中安装
 
-直接对 Codex 说：
+小白用户只需要直接对 Codex 说：
 
 ```text
-从 https://github.com/ninemouth/ffmpeg-video-recreator 安装 $ffmpeg-video-recreator，并完成验证。
+安装或更新 $ffmpeg-video-recreator，并配置图片生成能力。
 ```
 
-或者用英文：
+Codex 会自动完成：
+
+- 安装/更新 `$ffmpeg-video-recreator`。
+- 自动安装/更新 `$video-frame-image-asset-generator`。
+- 需要第三方生图时，在对话/终端提示里询问 base URL 和 API key。
+- 把配置写到本机安全配置文件，不要求用户理解命令参数。
+
+或者用英文说：
 
 ```text
-Install $ffmpeg-video-recreator from https://github.com/ninemouth/ffmpeg-video-recreator and verify it.
+Install or update $ffmpeg-video-recreator and configure image generation.
 ```
 
-Codex 应该执行的等价命令：
+Codex 内部执行的等价命令是：
 
 ```bash
 git clone https://github.com/ninemouth/ffmpeg-video-recreator.git
@@ -95,7 +102,9 @@ ${CODEX_HOME}/video-frame-image-asset-generator/image-provider.json
 
 安装/更新过程中，如果没有通过参数或环境变量提供第三方图片 provider 的 base URL 和 API key，脚本会在可交互终端中提示输入。默认 base URL 是 `https://www.thinkai.tv/v1`，默认模型是 `gpt-image-2`。如果暂时不配置 key，仍可使用 Codex 原生 `imagegen` 路径；第三方 API 路径会保持未配置状态。
 
-非交互安装时可以显式传入：
+下面这些参数只给自动化/开发维护场景使用，普通用户不需要填写。
+
+非交互自动化安装时可以显式传入：
 
 ```bash
 node scripts/install-or-update-from-github.mjs \
@@ -103,7 +112,7 @@ node scripts/install-or-update-from-github.mjs \
   --image-provider-api-key "<API_KEY>"
 ```
 
-如果只想安装 FFmpeg 分析能力，不安装 companion 图片 skill，可传：
+如果自动化场景只想安装 FFmpeg 分析能力，不安装 companion 图片 skill，可传：
 
 ```bash
 node scripts/install-or-update-from-github.mjs --no-companion-image-skill
@@ -114,7 +123,7 @@ node scripts/install-or-update-from-github.mjs --no-companion-image-skill
 直接对 Codex 说：
 
 ```text
-更新 $ffmpeg-video-recreator 到 GitHub 最新版本，并验证安装后的 skill 是最新的。
+更新 $ffmpeg-video-recreator，并同步更新图片生成能力。
 ```
 
 或者用英文：
@@ -363,13 +372,20 @@ The AI does not directly read the raw video stream by default. It reads FFmpeg-g
 
 ### Install in Codex
 
-Ask Codex:
+Beginner users only need to ask Codex:
 
 ```text
-Install $ffmpeg-video-recreator from https://github.com/ninemouth/ffmpeg-video-recreator and verify it.
+Install or update $ffmpeg-video-recreator and configure image generation.
 ```
 
-Manual equivalent:
+Codex will automatically:
+
+- Install/update `$ffmpeg-video-recreator`.
+- Install/update `$video-frame-image-asset-generator`.
+- Prompt for the image provider base URL and API key when third-party image generation needs configuration.
+- Store provider settings in the local machine config without requiring the user to understand CLI flags.
+
+Internal equivalent:
 
 ```bash
 git clone https://github.com/ninemouth/ffmpeg-video-recreator.git
@@ -409,7 +425,9 @@ If `CODEX_HOME` is not set:
 
 During install/update, if no base URL or API key is supplied through arguments or environment variables, the installer prompts for them in an interactive terminal. The default base URL is `https://www.thinkai.tv/v1`; the default model is `gpt-image-2`. If no key is configured yet, Codex-native `imagegen` remains available and the third-party API route stays unconfigured.
 
-Non-interactive install example:
+The following flags are for automation or development only. Normal users should not need them.
+
+Non-interactive automation example:
 
 ```bash
 node scripts/install-or-update-from-github.mjs \
@@ -417,7 +435,7 @@ node scripts/install-or-update-from-github.mjs \
   --image-provider-api-key "<API_KEY>"
 ```
 
-To install only FFmpeg analysis without the companion image skill:
+For automation that intentionally installs only FFmpeg analysis without the companion image skill:
 
 ```bash
 node scripts/install-or-update-from-github.mjs --no-companion-image-skill
@@ -428,7 +446,7 @@ node scripts/install-or-update-from-github.mjs --no-companion-image-skill
 Ask Codex:
 
 ```text
-Update $ffmpeg-video-recreator from GitHub and verify the installed skill is current.
+Update $ffmpeg-video-recreator and sync the image generation capability too.
 ```
 
 Manual equivalent:
