@@ -80,10 +80,37 @@ if (!existsSync(path.join(checkoutDir, ".git"))) {
 run(process.execPath, ["scripts/verify-skill.mjs"], { cwd: checkoutDir });
 run(process.execPath, ["scripts/sync-to-codex-skill.mjs", "--remote-branch", branch], { cwd: checkoutDir });
 
+let companion = null;
+if (!args["no-companion-image-skill"]) {
+  const companionArgs = ["scripts/install-companion-image-skill.mjs", "--branch", args["companion-branch"] || "main"];
+  if (args["companion-repo"]) companionArgs.push("--repo", String(args["companion-repo"]));
+  if (args["checkout-root"]) companionArgs.push("--checkout-root", String(args["checkout-root"]));
+  if (update) companionArgs.push("--update");
+  if (args["allow-dirty"]) companionArgs.push("--allow-dirty");
+  for (const key of [
+    "image-provider-base-url",
+    "image-provider-model",
+    "image-provider-api-key-env",
+    "image-provider-api-key",
+    "image-provider-key"
+  ]) {
+    if (args[key]) companionArgs.push(`--${key}`, String(args[key]));
+  }
+  if (args["skip-image-provider-config"]) companionArgs.push("--skip-image-provider-config");
+  if (args["no-image-provider-prompt"]) companionArgs.push("--no-image-provider-prompt");
+  run(process.execPath, companionArgs, { cwd: checkoutDir });
+  companion = {
+    skill: "video-frame-image-asset-generator",
+    installed_skill: path.join(codexHome, "skills", "video-frame-image-asset-generator"),
+    source_checkout: path.join(checkoutRoot, "video-frame-image-asset-generator")
+  };
+}
+
 console.log(JSON.stringify({
   status: "installed",
   source_checkout: checkoutDir,
   installed_skill: path.join(codexHome, "skills", "ffmpeg-video-recreator"),
+  companion_skill: companion,
   branch,
   commit: gitValue(checkoutDir, ["rev-parse", "HEAD"])
 }, null, 2));

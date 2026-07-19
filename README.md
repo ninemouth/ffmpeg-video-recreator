@@ -4,6 +4,8 @@ Codex skill for FFmpeg-based video keyframe extraction and recreate-ready video 
 
 `ffmpeg-video-recreator` helps Codex analyze videos without asking the AI to read the raw video directly. The deterministic layer uses `ffmpeg` and `ffprobe` to inspect videos, extract keyframes, and create structured run artifacts. Codex then reviews the extracted frames and metadata to write a language-matched report, script, shot list, and prompt pack that another AI can use to recreate or modify the video.
 
+The GitHub installer also installs the companion [`video-frame-image-asset-generator`](https://github.com/ninemouth/video-frame-image-asset-generator) skill. That companion turns extracted frames and recreate reports into clean still-image assets such as empty scene plates, UI-free scene reconstructions, plain-background multi-angle character references, wardrobe/prop cutouts, prompt packs, request packs, and generated images through Codex native image generation or a configured OpenAI-compatible third-party image API.
+
 中文说明见下方。English documentation follows after the Chinese section.
 
 ## 中文说明
@@ -20,6 +22,8 @@ Codex skill for FFmpeg-based video keyframe extraction and recreate-ready video 
 - 基于关键帧和 metadata 生成符合用户交互语言的可复刻创作报告，包括总结、镜头拆解、剧本、脚本、AI 视频生成提示词和修改方案。
 
 核心目标是得到一个完整交付包，而不只是一张 contact sheet 或一份报告。交付包里的关键帧、索引、metadata 和报告可以一起用于分析；真正交给 AI 视频工具或创作者复刻时，优先使用独立的 `output/recreation-pack/`。因为 AI 视频通常需要分段生成，复刻包会额外提供分段计划、上一段结束帧锚点和连续性锁定 prompt。
+
+安装/更新本 skill 时，安装器会默认同步独立的图片资产 companion skill：[`video-frame-image-asset-generator`](https://github.com/ninemouth/video-frame-image-asset-generator)。它负责把抽帧画面和复刻报告继续转换成干净空场景、去 UI 场景、多角度人物纯色背景、服装/道具 cutout、prompt pack、request pack，以及可通过 Codex 原生生图或第三方 OpenAI-compatible API 生成的图片资产。
 
 ### 工作方式
 
@@ -65,10 +69,44 @@ node scripts/install-or-update-from-github.mjs
 ${CODEX_HOME}/skills/ffmpeg-video-recreator
 ```
 
+同时会自动安装/更新 companion 图片 skill 到：
+
+```text
+${CODEX_HOME}/skills/video-frame-image-asset-generator
+```
+
 如果没有设置 `CODEX_HOME`，默认是：
 
 ```text
 ~/.codex/skills/ffmpeg-video-recreator
+```
+
+第三方图片 API 配置会写入本地文件：
+
+```text
+${CODEX_HOME}/video-frame-image-asset-generator/image-provider.json
+```
+
+如果没有设置 `CODEX_HOME`，默认是：
+
+```text
+~/.codex/video-frame-image-asset-generator/image-provider.json
+```
+
+安装/更新过程中，如果没有通过参数或环境变量提供第三方图片 provider 的 base URL 和 API key，脚本会在可交互终端中提示输入。默认 base URL 是 `https://www.thinkai.tv/v1`，默认模型是 `gpt-image-2`。如果暂时不配置 key，仍可使用 Codex 原生 `imagegen` 路径；第三方 API 路径会保持未配置状态。
+
+非交互安装时可以显式传入：
+
+```bash
+node scripts/install-or-update-from-github.mjs \
+  --image-provider-base-url "https://www.thinkai.tv/v1" \
+  --image-provider-api-key "<API_KEY>"
+```
+
+如果只想安装 FFmpeg 分析能力，不安装 companion 图片 skill，可传：
+
+```bash
+node scripts/install-or-update-from-github.mjs --no-companion-image-skill
 ```
 
 ### 在 Codex 中更新
@@ -305,6 +343,8 @@ It can:
 
 The goal is to produce a complete delivery package, not only a contact sheet or report. The package includes keyframes, an index, metadata, and a report for analysis. For actual handoff to an AI video tool or creator, use the independent `output/recreation-pack/`. Because AI video is usually generated in segments, the pack also includes a segment plan, previous-end-frame anchors, and continuity-lock prompts.
 
+Install/update also syncs the companion [`video-frame-image-asset-generator`](https://github.com/ninemouth/video-frame-image-asset-generator) skill. The companion turns extracted frames and recreate reports into clean still-image assets: scene plates, UI-free reconstructions, plain-background multi-angle character references, wardrobe/prop cutouts, prompt packs, request packs, and generated images through Codex native image generation or a configured OpenAI-compatible third-party API.
+
 ### How It Works
 
 ```text
@@ -343,10 +383,44 @@ The installed skill is synced to:
 ${CODEX_HOME}/skills/ffmpeg-video-recreator
 ```
 
+The companion image skill is also installed or updated to:
+
+```text
+${CODEX_HOME}/skills/video-frame-image-asset-generator
+```
+
 If `CODEX_HOME` is not set:
 
 ```text
 ~/.codex/skills/ffmpeg-video-recreator
+```
+
+Third-party image provider configuration is stored locally at:
+
+```text
+${CODEX_HOME}/video-frame-image-asset-generator/image-provider.json
+```
+
+If `CODEX_HOME` is not set:
+
+```text
+~/.codex/video-frame-image-asset-generator/image-provider.json
+```
+
+During install/update, if no base URL or API key is supplied through arguments or environment variables, the installer prompts for them in an interactive terminal. The default base URL is `https://www.thinkai.tv/v1`; the default model is `gpt-image-2`. If no key is configured yet, Codex-native `imagegen` remains available and the third-party API route stays unconfigured.
+
+Non-interactive install example:
+
+```bash
+node scripts/install-or-update-from-github.mjs \
+  --image-provider-base-url "https://www.thinkai.tv/v1" \
+  --image-provider-api-key "<API_KEY>"
+```
+
+To install only FFmpeg analysis without the companion image skill:
+
+```bash
+node scripts/install-or-update-from-github.mjs --no-companion-image-skill
 ```
 
 ### Update in Codex

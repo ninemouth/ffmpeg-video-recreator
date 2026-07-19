@@ -25,6 +25,7 @@ const required = [
   "scripts/validate-report-contract.mjs",
   "scripts/check-skill-update.mjs",
   "scripts/install-or-update-from-github.mjs",
+  "scripts/install-companion-image-skill.mjs",
   "scripts/sync-to-codex-skill.mjs",
   "references/report-contract.md",
   "references/github-install-update.md",
@@ -50,7 +51,7 @@ if (!skill.includes("direct_access") || !skill.includes("output/README.md")) {
 }
 
 const pkg = JSON.parse(await readFile(path.join(root, "package.json"), "utf8"));
-for (const script of ["verify", "ffmpeg:check", "ffmpeg:install", "extract:keyframes", "audio:install", "audio:analyze", "audio:transcribe", "audio:events", "audio:self-check", "report:validate", "check:update", "install:github", "update:github", "sync:codex"]) {
+for (const script of ["verify", "ffmpeg:check", "ffmpeg:install", "extract:keyframes", "audio:install", "audio:analyze", "audio:transcribe", "audio:events", "audio:self-check", "report:validate", "install:image-skill", "check:update", "install:github", "update:github", "sync:codex"]) {
   if (!pkg.scripts?.[script]) throw new Error(`package.json missing script: ${script}`);
 }
 if (pkg.license !== "MIT") {
@@ -92,6 +93,18 @@ for (const expected of [
 ]) {
   if (!extractSource.includes(expected)) {
     throw new Error(`extract-keyframes.mjs is missing direct-access contract text: ${expected}`);
+  }
+}
+
+const installerSource = await readFile(path.join(root, "scripts/install-or-update-from-github.mjs"), "utf8");
+for (const expected of [
+  "install-companion-image-skill.mjs",
+  "video-frame-image-asset-generator",
+  "image-provider-base-url",
+  "image-provider-api-key"
+]) {
+  if (!installerSource.includes(expected)) {
+    throw new Error(`install-or-update-from-github.mjs is missing companion install text: ${expected}`);
   }
 }
 
