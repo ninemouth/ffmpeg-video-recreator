@@ -205,6 +205,7 @@ work/runs/<run-id>/
 ├── metadata/
 │   ├── manifest.json
 │   ├── frame-index.json
+│   ├── frame-quality.json
 │   ├── audio-streams.json
 │   ├── audio-analysis.json
 │   ├── speech-transcript.json
@@ -245,6 +246,8 @@ work/runs/<run-id>/
 - `hybrid`：默认推荐。结合场景变化和固定间隔抽帧，适合大多数广告、短视频、产品视频。
 - `scene`：基于画面变化抽帧，适合剪辑密集、镜头切换明显的视频。
 - `interval`：按固定时间间隔抽帧，适合教程、录屏、讲解、长静态画面。
+
+默认开启轻量关键帧质量过滤：脚本先用 FFmpeg 抽候选帧，再用 FFmpeg 将候选 JPEG 解码为小尺寸灰度 raw buffer，由 Node 计算黑像素占比、白像素占比、亮度方差和边缘变化，过滤黑场、白场、低信息转场帧，并优先从相邻时间点补采替代帧。结果记录在 `metadata/frame-quality.json`。如果源片故意使用黑底字幕或低亮度标题卡，可用 `--no-frame-quality` 关闭，或用 `--max-black-ratio`、`--max-white-ratio`、`--min-luma-stddev` 调整阈值。
 
 ### 报告内容
 
@@ -468,6 +471,7 @@ work/runs/<run-id>/
 ├── metadata/
 │   ├── manifest.json
 │   ├── frame-index.json
+│   ├── frame-quality.json
 │   ├── audio-streams.json
 │   ├── audio-analysis.json
 │   ├── speech-transcript.json
@@ -508,6 +512,8 @@ For segmented generation, use:
 - `hybrid`: Recommended default. Combines scene-change and interval sampling.
 - `scene`: Uses visual scene changes. Best for fast edits, ads, music videos, and cinematic cuts.
 - `interval`: Samples at fixed time intervals. Best for tutorials, screen recordings, lectures, and long static scenes.
+
+Lightweight frame quality filtering is enabled by default. The script extracts candidate frames with FFmpeg, decodes each JPEG through FFmpeg into a small grayscale raw buffer, then computes black-pixel ratio, white-pixel ratio, luma variance, and edge variation in Node. Mostly black, mostly white, and near-empty transition frames are filtered, and nearby timestamps are sampled as replacements first. Results are written to `metadata/frame-quality.json`. Use `--no-frame-quality` for intentional black-background title cards, or tune `--max-black-ratio`, `--max-white-ratio`, and `--min-luma-stddev`.
 
 ### Report Contents
 

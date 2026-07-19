@@ -52,6 +52,7 @@ const requiredPackEntries = [
 const requiredSupportMentions = [
   "metadata/manifest.json",
   "metadata/frame-index.json",
+  "metadata/frame-quality.json",
   "output/keyframes-index.md",
   "output/keyframes/",
   "output/recreation-pack/",

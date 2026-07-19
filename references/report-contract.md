@@ -166,6 +166,7 @@ Use these files when present:
 - `metadata/audio-analysis.json`: non-AI signal analysis including silence, volume, loudness, RMS peaks, and optional librosa rhythm/spectrum.
 - `metadata/speech-transcript.json`: local ASR provider selection, hardware evidence, model, status, and transcript segments.
 - `metadata/audio-events.json`: local sound-event provider selection and skipped/completed status.
+- `metadata/frame-quality.json`: FFmpeg-based frame quality filter decisions, rejected black/white/low-information frames, and replacement attempts.
 - `output/audio-analysis.md`, `output/speech-transcript.md`, `output/audio-events.md`: human-readable summaries.
 - `output/report-contract-check.json`: final report contract validation status.
 

@@ -59,7 +59,7 @@ work/runs/<timestamp-slug>/
 ├── input/              # optional copied source assets or symlinks
 ├── frames/             # raw extracted keyframes grouped by video
 ├── audio/              # extracted 16 kHz mono WAV files for local analysis/ASR
-├── metadata/           # ffprobe, manifest, command log, frame index
+├── metadata/           # ffprobe, manifest, command log, frame index, frame quality report
 ├── output/             # final delivery package
 │   ├── keyframes/      # copied keyframes for delivery
 │   ├── recreation-pack/# portable pack for AI recreation handoff
@@ -86,6 +86,8 @@ node scripts/extract-keyframes.mjs --input "/path/to/videos" --run "work/runs/<r
 ```
 
 By default, extracted keyframes are copied into `output/keyframes/` as formal deliverables. Use `--no-copy-keyframes` only when the video is huge and the user explicitly prefers references to the raw `frames/` directory.
+
+Frame quality filtering is enabled by default. After FFmpeg extracts candidate frames, the script uses FFmpeg to decode each JPEG to a small grayscale buffer and rejects mostly black, mostly white, or near-empty transition frames before copying formal deliverables. Rejected frames are recorded in `metadata/frame-quality.json`; the script tries nearby replacement timestamps first. Use `--no-frame-quality` only when the source intentionally contains black-background title cards or other low-luma frames that must be preserved.
 
 ## Delivery Package
 

@@ -95,6 +95,18 @@ for (const expected of [
   }
 }
 
+for (const expected of [
+  "metadata/frame-quality.json",
+  "max_black_ratio",
+  "mostly_black",
+  "quality_replacement",
+  "no-frame-quality"
+]) {
+  if (!extractSource.includes(expected)) {
+    throw new Error(`extract-keyframes.mjs is missing frame quality filter text: ${expected}`);
+  }
+}
+
 const reportValidatorSource = await readFile(path.join(root, "scripts/validate-report-contract.mjs"), "utf8");
 for (const expected of [
   "ffmpeg_video_recreator.report_contract_check.v1",

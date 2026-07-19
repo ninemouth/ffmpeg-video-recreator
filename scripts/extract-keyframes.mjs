@@ -3,12 +3,13 @@
 // SPDX-License-Identifier: MIT
 
 import { spawn, spawnSync } from "node:child_process";
-import { copyFile, mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { copyFile, mkdir, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath } from "node:url";
 
 const VIDEO_EXTENSIONS = new Set([".mp4", ".mov", ".m4v", ".avi", ".mkv", ".webm", ".wmv", ".flv"]);
+const DEFAULT_REPLACEMENT_OFFSETS = [0.15, -0.15, 0.3, -0.3, 0.5, -0.5, 0.75, -0.75, 1, -1];
 
 function parseArgs(argv) {
   const args = {};
@@ -67,6 +68,21 @@ function run(command, args) {
   });
 }
 
+function runBuffer(command, args) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, { stdio: ["ignore", "pipe", "pipe"] });
+    const chunks = [];
+    let stderr = "";
+    child.stdout.on("data", (chunk) => { chunks.push(chunk); });
+    child.stderr.on("data", (chunk) => { stderr += chunk; });
+    child.on("error", reject);
+    child.on("close", (code) => {
+      if (code === 0) resolve(Buffer.concat(chunks));
+      else reject(new Error(`${command} exited ${code}\n${stderr}`));
+    });
+  });
+}
+
 async function ffprobe(video) {
   const { stdout } = await run("ffprobe", [
     "-v", "error",
@@ -99,6 +115,20 @@ async function extract(video, outputPattern, mode, interval, sceneThreshold) {
   ]);
 }
 
+async function extractSingleFrame(video, seconds, outputPath) {
+  await run("ffmpeg", [
+    "-hide_banner",
+    "-loglevel", "error",
+    "-y",
+    "-ss", seconds.toFixed(3),
+    "-i", video,
+    "-frames:v", "1",
+    "-q:v", "2",
+    "-pix_fmt", "yuvj420p",
+    outputPath
+  ]);
+}
+
 function technicalSummary(probe) {
   const video = probe.streams.find((stream) => stream.codec_type === "video") || {};
   const audio = probe.streams.find((stream) => stream.codec_type === "audio") || null;
@@ -110,8 +140,21 @@ function technicalSummary(probe) {
     frame_rate: video.avg_frame_rate || video.r_frame_rate || null,
     video_codec: video.codec_name || null,
     has_audio: Boolean(audio),
-    audio_codec: audio?.codec_name || null
+    audio_codec: audio?.codec_name || null,
+    frame_rate_number: parseRate(video.avg_frame_rate || video.r_frame_rate)
   };
+}
+
+function parseRate(value) {
+  if (!value) return null;
+  const text = String(value);
+  if (text.includes("/")) {
+    const [num, den] = text.split("/").map(Number);
+    if (Number.isFinite(num) && Number.isFinite(den) && den !== 0) return num / den;
+    return null;
+  }
+  const rate = Number(text);
+  return Number.isFinite(rate) && rate > 0 ? rate : null;
 }
 
 async function main() {
@@ -126,6 +169,7 @@ async function main() {
   const segmentFrames = Math.max(2, Number(args["segment-frames"] || 4));
   const analyzeAudio = args.audio !== "false" && args["no-audio"] !== true;
   const audioAi = args["audio-ai"] !== "false";
+  const frameQuality = createFrameQualityOptions(args);
 
   if (!input || !runDir) {
     console.error("Usage: node scripts/extract-keyframes.mjs --input <video-dir> --run <run-dir> [--mode hybrid|scene|interval] [--language zh|en|auto]");
@@ -157,9 +201,11 @@ async function main() {
       scene_threshold: sceneThreshold,
       report_language: language,
       keyframes_copied_to_output: copyKeyframes,
-      segment_frames: segmentFrames
+      segment_frames: segmentFrames,
+      frame_quality_filter: frameQuality
     },
-    videos: []
+    videos: [],
+    frame_quality: []
   };
 
   for (const video of videos) {
@@ -175,20 +221,29 @@ async function main() {
     const outputPattern = path.join(frameDir, "frame-%08d.jpg");
     await extract(video, outputPattern, mode, interval, sceneThreshold);
 
-    const frames = (await readdir(frameDir))
+    const rawFrames = (await readdir(frameDir))
       .filter((file) => file.toLowerCase().endsWith(".jpg"))
       .sort()
       .map((file, index) => {
         const frame = path.join("frames", videoSlug, file);
-        const deliveryFrame = path.join("output", "keyframes", videoSlug, file);
+        const timestamp = timecodeFromFrameFile(file, metadata.frame_rate_number, index, mode, interval);
         return {
           index: index + 1,
           file,
           frame,
-          delivery_frame: copyKeyframes ? deliveryFrame : "",
-          approx_timecode: approximateTimecode(index, mode, interval)
+          source_frame: frame,
+          timestamp_seconds: timestamp.seconds,
+          approx_timecode: timestamp.timecode,
+          source: "extracted"
         };
       });
+    const qualityResult = await selectQualityFrames(video, rawFrames, runDir, videoSlug, metadata, frameQuality);
+    const frames = qualityResult.frames.map((frame, index) => ({
+      ...frame,
+      index: index + 1,
+      delivery_frame: copyKeyframes ? path.join("output", "keyframes", videoSlug, frame.file) : ""
+    }));
+    manifest.frame_quality.push(qualityResult.report);
 
     const recreationKeyframeDir = path.join(runDir, "output", "recreation-pack", "reference-keyframes", videoSlug);
     await mkdir(recreationKeyframeDir, { recursive: true });
@@ -213,6 +268,9 @@ async function main() {
       frame_directory: path.relative(runDir, frameDir),
       delivery_keyframe_directory: copyKeyframes ? path.join("output", "keyframes", videoSlug) : "",
       frame_count: frames.length,
+      raw_frame_count: rawFrames.length,
+      filtered_frame_count: qualityResult.report.filtered_count,
+      replacement_frame_count: qualityResult.report.replacement_count,
       metadata
     });
   }
@@ -224,6 +282,7 @@ async function main() {
   } catch {
     existing = {};
   }
+  await writeFile(path.join(runDir, "metadata", "frame-quality.json"), `${JSON.stringify(manifest.frame_quality, null, 2)}\n`);
   await writeFile(manifestPath, `${JSON.stringify({ ...existing, ...manifest, status: "keyframes_extracted", updated_at: new Date().toISOString() }, null, 2)}\n`);
   await writeFile(path.join(runDir, "metadata", "frame-index.json"), `${JSON.stringify(frameIndex, null, 2)}\n`);
   await writeFile(path.join(runDir, "output", "keyframes-index.md"), createKeyframeIndex(manifest, frameIndex, language), "utf8");
@@ -286,13 +345,276 @@ function normalizeLanguage(value) {
   return "auto";
 }
 
-function approximateTimecode(index, mode, interval) {
-  if (mode === "scene") return "scene-change";
-  const seconds = index * interval;
-  const hh = String(Math.floor(seconds / 3600)).padStart(2, "0");
-  const mm = String(Math.floor((seconds % 3600) / 60)).padStart(2, "0");
-  const ss = String(Math.floor(seconds % 60)).padStart(2, "0");
-  return `${hh}:${mm}:${ss}`;
+function createFrameQualityOptions(args) {
+  return {
+    enabled: args["no-frame-quality"] !== true && args["frame-quality"] !== "false",
+    sample_size: Math.max(16, Number(args["frame-quality-size"] || 64)),
+    black_pixel_threshold: Number(args["black-pixel-threshold"] || 20),
+    white_pixel_threshold: Number(args["white-pixel-threshold"] || 245),
+    max_black_ratio: Number(args["max-black-ratio"] || 0.82),
+    max_white_ratio: Number(args["max-white-ratio"] || 0.94),
+    min_luma_stddev: Number(args["min-luma-stddev"] || 3.5),
+    duplicate_timestamp_window_seconds: Number(args["duplicate-timestamp-window"] || 0.05),
+    replacement_offsets_seconds: String(args["replacement-offsets"] || DEFAULT_REPLACEMENT_OFFSETS.join(","))
+      .split(",")
+      .map((value) => Number(value.trim()))
+      .filter((value) => Number.isFinite(value) && value !== 0)
+  };
+}
+
+function formatTimecode(seconds) {
+  const safeSeconds = Math.max(0, Number(seconds) || 0);
+  const hh = String(Math.floor(safeSeconds / 3600)).padStart(2, "0");
+  const mm = String(Math.floor((safeSeconds % 3600) / 60)).padStart(2, "0");
+  const ss = String(Math.floor(safeSeconds % 60)).padStart(2, "0");
+  const cs = Math.round((safeSeconds - Math.floor(safeSeconds)) * 100);
+  return cs ? `${hh}:${mm}:${ss}.${String(cs).padStart(2, "0")}` : `${hh}:${mm}:${ss}`;
+}
+
+function frameNumberFromFile(file) {
+  const match = path.basename(file).match(/frame-([0-9]+)/);
+  return match ? Number(match[1]) : null;
+}
+
+function timecodeFromFrameFile(file, frameRate, index, mode, interval) {
+  if (mode === "interval") {
+    const seconds = index * interval;
+    return { seconds, timecode: formatTimecode(seconds) };
+  }
+  const frameNumber = frameNumberFromFile(file);
+  if (Number.isFinite(frameNumber) && frameRate) {
+    const seconds = frameNumber / frameRate;
+    return { seconds, timecode: formatTimecode(seconds) };
+  }
+  const fallbackSeconds = mode === "scene" ? null : index * interval;
+  if (fallbackSeconds === null) return { seconds: null, timecode: "scene-change" };
+  return { seconds: fallbackSeconds, timecode: formatTimecode(fallbackSeconds) };
+}
+
+async function selectQualityFrames(video, rawFrames, runDir, videoSlug, metadata, options) {
+  const report = {
+    video: path.basename(video),
+    enabled: options.enabled,
+    sample_size: options.sample_size,
+    thresholds: {
+      black_pixel_threshold: options.black_pixel_threshold,
+      white_pixel_threshold: options.white_pixel_threshold,
+      max_black_ratio: options.max_black_ratio,
+      max_white_ratio: options.max_white_ratio,
+      min_luma_stddev: options.min_luma_stddev
+    },
+    raw_count: rawFrames.length,
+    selected_count: rawFrames.length,
+    filtered_count: 0,
+    replacement_count: 0,
+    deduped_count: 0,
+    fallback_used: false,
+    frames: []
+  };
+  if (!options.enabled) {
+    report.status = "skipped";
+    report.reason = "frame_quality_filter_disabled";
+    return { frames: rawFrames, report };
+  }
+
+  const selected = [];
+  const scoredRecords = [];
+  for (const frame of rawFrames) {
+    const quality = await analyzeFrameQuality(path.join(runDir, frame.frame), options);
+    const record = {
+      file: frame.frame,
+      timecode: frame.approx_timecode,
+      timestamp_seconds: frame.timestamp_seconds,
+      quality,
+      accepted: !quality.rejected,
+      replacement: null
+    };
+    if (!quality.rejected) {
+      selected.push({ ...frame, quality, quality_status: "accepted" });
+    } else {
+      report.filtered_count += 1;
+      const replacement = await findReplacementFrame(video, frame, runDir, videoSlug, metadata, options);
+      if (replacement) {
+        selected.push(replacement);
+        record.accepted = true;
+        record.replacement = {
+          file: replacement.frame,
+          timecode: replacement.approx_timecode,
+          timestamp_seconds: replacement.timestamp_seconds,
+          quality: replacement.quality
+        };
+        report.replacement_count += 1;
+      }
+    }
+    scoredRecords.push(record);
+    report.frames.push(record);
+  }
+
+  if (!selected.length && rawFrames.length) {
+    const best = scoredRecords
+      .map((record, index) => ({ record, index }))
+      .sort((a, b) => b.record.quality.score - a.record.quality.score)[0];
+    const fallback = rawFrames[best.index];
+    selected.push({
+      ...fallback,
+      quality: best.record.quality,
+      quality_status: "fallback_best_available"
+    });
+    scoredRecords[best.index].accepted = true;
+    scoredRecords[best.index].fallback = true;
+    report.fallback_used = true;
+  }
+
+  const sortedSelected = selected.sort((a, b) => {
+    const aTime = Number.isFinite(a.timestamp_seconds) ? a.timestamp_seconds : a.index;
+    const bTime = Number.isFinite(b.timestamp_seconds) ? b.timestamp_seconds : b.index;
+    return aTime - bTime;
+  });
+  const dedupedSelected = dedupeSelectedFrames(sortedSelected, options.duplicate_timestamp_window_seconds);
+  report.deduped_count = sortedSelected.length - dedupedSelected.length;
+  report.selected_count = dedupedSelected.length;
+  report.status = "completed";
+  return { frames: dedupedSelected, report };
+}
+
+function dedupeSelectedFrames(frames, timestampWindow) {
+  const selected = [];
+  for (const frame of frames) {
+    const currentTime = Number.isFinite(frame.timestamp_seconds) ? frame.timestamp_seconds : null;
+    const existingIndex = currentTime === null
+      ? -1
+      : selected.findIndex((item) => Number.isFinite(item.timestamp_seconds) && Math.abs(item.timestamp_seconds - currentTime) <= timestampWindow);
+    if (existingIndex === -1) {
+      selected.push(frame);
+      continue;
+    }
+    const existing = selected[existingIndex];
+    if (preferFrame(frame, existing)) {
+      selected[existingIndex] = frame;
+    }
+  }
+  return selected;
+}
+
+function preferFrame(candidate, existing) {
+  if (candidate.source === "extracted" && existing.source !== "extracted") return true;
+  if (candidate.source !== "extracted" && existing.source === "extracted") return false;
+  return (candidate.quality?.score ?? -Infinity) > (existing.quality?.score ?? -Infinity);
+}
+
+async function analyzeFrameQuality(framePath, options) {
+  const size = options.sample_size;
+  const raw = await runBuffer("ffmpeg", [
+    "-hide_banner",
+    "-loglevel", "error",
+    "-i", framePath,
+    "-vf", `scale=${size}:${size},format=gray`,
+    "-frames:v", "1",
+    "-f", "rawvideo",
+    "-"
+  ]);
+  if (!raw.length) {
+    return {
+      status: "failed",
+      rejected: true,
+      reasons: ["empty_decode"],
+      score: -Infinity
+    };
+  }
+
+  let sum = 0;
+  let black = 0;
+  let white = 0;
+  for (const value of raw) {
+    sum += value;
+    if (value <= options.black_pixel_threshold) black += 1;
+    if (value >= options.white_pixel_threshold) white += 1;
+  }
+  const mean = sum / raw.length;
+  let variance = 0;
+  for (const value of raw) {
+    variance += (value - mean) ** 2;
+  }
+  const stddev = Math.sqrt(variance / raw.length);
+  const edgeMean = meanAbsoluteNeighborDifference(raw, size);
+  const blackRatio = black / raw.length;
+  const whiteRatio = white / raw.length;
+  const reasons = [];
+  if (blackRatio >= options.max_black_ratio) reasons.push("mostly_black");
+  if (whiteRatio >= options.max_white_ratio) reasons.push("mostly_white");
+  if (stddev <= options.min_luma_stddev && (mean < 35 || mean > 220)) reasons.push("low_information_luma");
+  const score = stddev + edgeMean * 0.5 - blackRatio * 20 - whiteRatio * 8;
+  return {
+    status: "completed",
+    rejected: reasons.length > 0,
+    reasons,
+    score: Number(score.toFixed(4)),
+    mean_luma: Number(mean.toFixed(4)),
+    luma_stddev: Number(stddev.toFixed(4)),
+    edge_mean: Number(edgeMean.toFixed(4)),
+    black_ratio: Number(blackRatio.toFixed(4)),
+    white_ratio: Number(whiteRatio.toFixed(4))
+  };
+}
+
+function meanAbsoluteNeighborDifference(raw, size) {
+  let total = 0;
+  let count = 0;
+  for (let y = 0; y < size; y += 1) {
+    for (let x = 0; x < size; x += 1) {
+      const current = raw[y * size + x];
+      if (x + 1 < size) {
+        total += Math.abs(current - raw[y * size + x + 1]);
+        count += 1;
+      }
+      if (y + 1 < size) {
+        total += Math.abs(current - raw[(y + 1) * size + x]);
+        count += 1;
+      }
+    }
+  }
+  return count ? total / count : 0;
+}
+
+async function findReplacementFrame(video, frame, runDir, videoSlug, metadata, options) {
+  if (!Number.isFinite(frame.timestamp_seconds)) return null;
+  const duration = Number(metadata.duration_seconds || 0);
+  if (!duration) return null;
+  const replacementDir = path.join(runDir, "frames", videoSlug, "quality-replacements");
+  await mkdir(replacementDir, { recursive: true });
+  const tried = new Set();
+  for (const offset of options.replacement_offsets_seconds) {
+    const seconds = Math.min(Math.max(frame.timestamp_seconds + offset, 0), Math.max(duration - 0.001, 0));
+    const key = seconds.toFixed(3);
+    if (tried.has(key)) continue;
+    tried.add(key);
+    const label = offset > 0 ? `p${Math.round(offset * 1000)}` : `m${Math.round(Math.abs(offset) * 1000)}`;
+    const replacementFile = `${path.basename(frame.file, ".jpg")}-replacement-${label}.jpg`;
+    const replacementPath = path.join(replacementDir, replacementFile);
+    try {
+      await extractSingleFrame(video, seconds, replacementPath);
+      const replacementStat = await stat(replacementPath);
+      if (!replacementStat.size) continue;
+    } catch {
+      continue;
+    }
+    const quality = await analyzeFrameQuality(replacementPath, options);
+    if (!quality.rejected) {
+      return {
+        file: replacementFile,
+        frame: path.join("frames", videoSlug, "quality-replacements", replacementFile),
+        source_frame: frame.frame,
+        replaced_from: frame.frame,
+        replacement_offset_seconds: offset,
+        timestamp_seconds: seconds,
+        approx_timecode: formatTimecode(seconds),
+        source: "quality_replacement",
+        quality,
+        quality_status: "replacement"
+      };
+    }
+  }
+  return null;
 }
 
 function createDeliveryManifest(manifest, frameIndex, options = {}) {
@@ -310,6 +632,7 @@ function createDeliveryManifest(manifest, frameIndex, options = {}) {
     segment_anchors_directory: "output/recreation-pack/segments",
     report_contract_check: "output/report-contract-check.json",
     frame_index_json: "metadata/frame-index.json",
+    frame_quality_report: "metadata/frame-quality.json",
     manifest_json: "metadata/manifest.json",
     ffprobe_metadata_pattern: "metadata/*.ffprobe.json"
   };
@@ -867,6 +1190,7 @@ function createReportTemplate(manifest, language) {
 - Report language: ${manifest.extraction.report_language === "auto" ? "Match the user's interaction language" : manifest.extraction.report_language}
 - Keyframe delivery directory: output/keyframes/
 - Keyframe index: output/keyframes-index.md
+- Frame quality report: metadata/frame-quality.json
 - Delivery index: output/README.md
 - Delivery manifest: output/delivery-manifest.json
 - Recreation pack: output/recreation-pack/
@@ -913,7 +1237,7 @@ TODO: Separate must-preserve elements, editable elements, requested changes, and
 
 ## 11. Gaps and QA
 
-TODO: Note missing audio analysis, ASR skipped status, sound-event skipped status, sparse frames, unreadable text, blur, fast motion, or legal/brand constraints. End with exact supporting files including metadata/manifest.json, metadata/frame-index.json, output/keyframes-index.md, output/keyframes/, output/recreation-pack/, output/delivery-manifest.json, and output/report-contract-check.json.
+TODO: Note missing audio analysis, ASR skipped status, sound-event skipped status, sparse frames, filtered black/white/low-information frames, unreadable text, blur, fast motion, or legal/brand constraints. End with exact supporting files including metadata/manifest.json, metadata/frame-index.json, metadata/frame-quality.json, output/keyframes-index.md, output/keyframes/, output/recreation-pack/, output/delivery-manifest.json, and output/report-contract-check.json.
 `;
 }
 
@@ -931,6 +1255,7 @@ function createChineseReportTemplate(manifest) {
 - 报告语言：中文
 - 关键帧交付目录：output/keyframes/
 - 关键帧索引：output/keyframes-index.md
+- 关键帧质量报告：metadata/frame-quality.json
 - 交付入口索引：output/README.md
 - 交付清单：output/delivery-manifest.json
 - 复刻交接包：output/recreation-pack/
@@ -977,7 +1302,7 @@ TODO：分开列出必须保留、可以修改、用户要求修改、可替代�
 
 ## 11. 缺口与 QA
 
-TODO：记录缺失音频分析、ASR skipped 状态、声音事件 skipped 状态、关键帧不足、画面模糊、文字不可读、快速运动未捕捉、品牌/肖像/版权风险等问题。结尾列出精确支撑文件，包括 metadata/manifest.json、metadata/frame-index.json、output/keyframes-index.md、output/keyframes/、output/recreation-pack/、output/delivery-manifest.json 和 output/report-contract-check.json。
+TODO：记录缺失音频分析、ASR skipped 状态、声音事件 skipped 状态、关键帧不足、被过滤的黑场/白场/低信息帧、画面模糊、文字不可读、快速运动未捕捉、品牌/肖像/版权风险等问题。结尾列出精确支撑文件，包括 metadata/manifest.json、metadata/frame-index.json、metadata/frame-quality.json、output/keyframes-index.md、output/keyframes/、output/recreation-pack/、output/delivery-manifest.json 和 output/report-contract-check.json。
 `;
 }
 
