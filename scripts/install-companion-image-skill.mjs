@@ -57,7 +57,7 @@ const branch = args.branch || "main";
 const checkoutRoot = path.resolve(args["checkout-root"] || path.join(codexHome, "skill-sources"));
 const checkoutDir = path.resolve(args.checkout || path.join(checkoutRoot, "video-frame-image-asset-generator"));
 const installedSkill = path.join(codexHome, "skills", "video-frame-image-asset-generator");
-const update = Boolean(args.update);
+const update = args["no-update"] !== true;
 
 if (!commandExists("git")) throw new Error("Git is required before installing the companion image skill.");
 if (!commandExists("node")) throw new Error("Node.js 18+ is required before installing the companion image skill.");
