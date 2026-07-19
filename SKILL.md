@@ -126,7 +126,7 @@ The recreation pack contains:
 - `segments/`: per-segment start frame, end frame, and previous-segment-end anchor files.
 - `recreation-manifest.json`: machine-readable pack inventory.
 
-If a contact sheet is also generated, treat it as a navigation aid. It does not replace the individual keyframe files.
+The current extractor does not generate a contact sheet by default. If an older run or an external reviewer generated one, treat it only as a navigation aid. It does not replace the individual keyframe files.
 
 ## Segment Continuity
 

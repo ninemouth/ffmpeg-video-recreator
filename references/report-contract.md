@@ -46,7 +46,7 @@ List the extracted keyframes as formal evidence assets:
 | Video | Frame file | Approx. timecode | What it shows | Why it matters for recreation |
 | --- | --- | --- | --- | --- |
 
-Use `output/keyframes-index.md` and the individual image files as the source of truth. A contact sheet can help navigation, but it is not a substitute for individual keyframe deliverables.
+Use `output/keyframes-index.md` and the individual image files as the source of truth. The current extractor does not generate a contact sheet by default. A contact sheet from older runs or external tooling can help navigation, but it is not a substitute for individual keyframe deliverables.
 
 ### 3. Recreation Pack
 
