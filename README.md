@@ -4,7 +4,7 @@ Codex skill for FFmpeg-based video keyframe extraction and recreate-ready video 
 
 `ffmpeg-video-recreator` helps Codex analyze videos without asking the AI to read the raw video directly. The deterministic layer uses `ffmpeg` and `ffprobe` to inspect videos, extract keyframes, and create structured run artifacts. Codex then reviews the extracted frames and metadata to write a language-matched report, script, shot list, and prompt pack that another AI can use to recreate or modify the video.
 
-The GitHub installer also installs the companion [`video-frame-image-asset-generator`](https://github.com/ninemouth/video-frame-image-asset-generator) skill. That companion turns extracted frames and recreate reports into clean still-image assets such as empty scene plates, UI-free scene reconstructions, plain-background multi-angle character references, wardrobe/prop cutouts, prompt packs, request packs, and generated images through Codex native image generation or a configured OpenAI-compatible third-party image API.
+The GitHub installer also installs the companion [`video-frame-image-asset-generator`](https://github.com/ninemouth/video-frame-image-asset-generator) skill. That companion turns extracted frames and recreate reports into clean still-image assets such as empty scene plates, UI-free scene reconstructions, plain-background multi-angle character references, wardrobe/prop cutouts, prompt packs, request packs, and generated images through Codex native image generation or a configured OpenAI-compatible third-party image API. For commercial/product videos, it uses a standard product-scene control framework so Codex derives the product role, action dependencies, contact surfaces, material/detail claims, required asset roles, and do-not-generate risks from visual evidence instead of requiring users to choose product-specific parameters.
 
 中文说明见下方。English documentation follows after the Chinese section.
 
@@ -23,7 +23,7 @@ The GitHub installer also installs the companion [`video-frame-image-asset-gener
 
 核心目标是得到一个完整交付包，而不只是一张 contact sheet 或一份报告。交付包里的关键帧、索引、metadata 和报告可以一起用于分析；真正交给 AI 视频工具或创作者复刻时，优先使用独立的 `output/recreation-pack/`。因为 AI 视频通常需要分段生成，复刻包会额外提供分段计划、上一段结束帧锚点和连续性锁定 prompt。
 
-安装/更新本 skill 时，安装器会默认同步独立的图片资产 companion skill：[`video-frame-image-asset-generator`](https://github.com/ninemouth/video-frame-image-asset-generator)。它负责把抽帧画面和复刻报告继续转换成干净空场景、去 UI 场景、多角度人物纯色背景、服装/道具 cutout、prompt pack、request pack，以及可通过 Codex 原生生图或第三方 OpenAI-compatible API 生成的图片资产。
+安装/更新本 skill 时，安装器会默认同步独立的图片资产 companion skill：[`video-frame-image-asset-generator`](https://github.com/ninemouth/video-frame-image-asset-generator)。它负责把抽帧画面和复刻报告继续转换成干净空场景、去 UI 场景、多角度人物纯色背景、服装/道具 cutout、prompt pack、request pack，以及可通过 Codex 原生生图或第三方 OpenAI-compatible API 生成的图片资产。对于商品/商业视频，它使用标准商品场景控制框架，让 Codex 根据视觉证据自动定义商品角色、动作依赖、接触面、材质/细节卖点、必需资产角色和不要生成的风险，不要求用户手动选择品类参数。
 
 图片 companion skill 的目标不是生成“好看的图”，而是为 AI 视频复刻提供稳定控制资产。新版会按角色标记交付状态：`ready_for_video_model`、`reference_only`、`fallback_review_required`、`retry_required`、`failed_role`。本地裁切、遮罩、复用旧图或 provider 失败后的替代图不能直接算视频模型可用 final；纯背景模特必须是真纯底，姿态包必须拆出独立姿态图，服装细节必须是真材质/结构细节。
 
@@ -356,7 +356,7 @@ The goal is to produce a complete delivery package, not only a contact sheet or 
 
 Install/update also syncs the companion [`video-frame-image-asset-generator`](https://github.com/ninemouth/video-frame-image-asset-generator) skill. The companion turns extracted frames and recreate reports into clean still-image assets: scene plates, UI-free reconstructions, plain-background multi-angle character references, wardrobe/prop cutouts, prompt packs, request packs, and generated images through Codex native image generation or a configured OpenAI-compatible third-party API.
 
-The companion image skill is for stable video-recreation control assets, not merely attractive images. Current deliveries use explicit statuses: `ready_for_video_model`, `reference_only`, `fallback_review_required`, `retry_required`, and `failed_role`. Local crops, masks, reused older images, or provider-blocked substitutes must not be treated as video-ready finals; plain-background model assets must be truly plain, pose packs must include individual pose files, and wardrobe details must show real material or construction detail.
+The companion image skill is for stable video-recreation control assets, not merely attractive images. For product scenes, it uses a standard control framework instead of product-category presets: derive product role, action dependencies, contact surfaces, scene dependencies, material/detail claims, required asset roles, and do-not-generate risks from the visual evidence brief. Current deliveries use explicit statuses: `ready_for_video_model`, `reference_only`, `fallback_review_required`, `retry_required`, and `failed_role`. Local crops, masks, reused older images, or provider-blocked substitutes must not be treated as video-ready finals; plain-background model assets must be truly plain, pose packs must include individual pose files, and wardrobe details must show real material or construction detail.
 
 ### How It Works
 
