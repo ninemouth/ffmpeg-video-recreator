@@ -27,6 +27,8 @@ The GitHub installer also installs the companion [`video-frame-image-asset-gener
 
 图片 companion skill 的目标不是生成“好看的图”，而是为 AI 视频复刻提供稳定控制资产。新版会按角色标记交付状态：`ready_for_video_model`、`reference_only`、`fallback_review_required`、`retry_required`、`failed_role`。本地裁切、遮罩、复用旧图或 provider 失败后的替代图不能直接算视频模型可用 final；纯背景模特必须是真纯底，姿态包必须拆出独立姿态图，服装细节必须是真材质/结构细节。
 
+图片资产交付必须区分“最终可用资产”和“审计材料”：`final-assets/` 只允许包含 `ready_for_video_model` 文件，非最终的 `reference_only`、`fallback_review_required`、`retry_required`、`failed_role` 会隔离到 `review-assets/`。对用户交付 zip 时，应使用 companion skill 生成的 clean final handoff 包；完整 run zip 可以保留用于排查，但必须标记为 audit/debug 包，不能当作最终资产包。
+
 ### 工作方式
 
 ```text
@@ -357,6 +359,8 @@ The goal is to produce a complete delivery package, not only a contact sheet or 
 Install/update also syncs the companion [`video-frame-image-asset-generator`](https://github.com/ninemouth/video-frame-image-asset-generator) skill. The companion turns extracted frames and recreate reports into clean still-image assets: scene plates, UI-free reconstructions, plain-background multi-angle character references, wardrobe/prop cutouts, prompt packs, request packs, and generated images through Codex native image generation or a configured OpenAI-compatible third-party API.
 
 The companion image skill is for stable video-recreation control assets, not merely attractive images. For product scenes, it uses a standard control framework instead of product-category presets: derive product role, action dependencies, contact surfaces, scene dependencies, material/detail claims, required asset roles, and do-not-generate risks from the visual evidence brief. Current deliveries use explicit statuses: `ready_for_video_model`, `reference_only`, `fallback_review_required`, `retry_required`, and `failed_role`. Local crops, masks, reused older images, or provider-blocked substitutes must not be treated as video-ready finals; plain-background model assets must be truly plain, pose packs must include individual pose files, and wardrobe details must show real material or construction detail.
+
+Image-asset delivery must separate usable final assets from audit material. `final-assets/` may contain only `ready_for_video_model` files; non-final `reference_only`, `fallback_review_required`, `retry_required`, and `failed_role` files are isolated under `review-assets/`. User-facing zip delivery should use the companion skill's clean final handoff package. A full run zip can be kept for troubleshooting, but it must be labeled as an audit/debug package rather than final usable assets.
 
 ### How It Works
 
